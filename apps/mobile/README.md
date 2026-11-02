@@ -5,8 +5,8 @@ Companion mobile offline-first do PsicoDesk, construído com Expo 58, Expo Route
 ## Execução
 
 1. Copie `.env.example` para `.env.local` e informe a URL HTTPS da API autorizada.
-2. Execute `npm install` dentro desta pasta.
-3. Use `npm start` e valide em dispositivo físico com Expo Development Build.
+2. Execute `npm ci --ignore-scripts` na raiz do monorepo.
+3. Use `npm run dev:mobile` e valide em dispositivo físico com Expo Development Build.
 
 ## Segurança e dados
 
@@ -21,8 +21,8 @@ Companion mobile offline-first do PsicoDesk, construído com Expo 58, Expo Route
 
 ## Contrato esperado da API
 
-O cliente espera `/v1/auth/*`, `/v1/dashboard`, `/v1/appointments`, `/v1/patients`, `/v1/clinical-records`, `/v1/charges`, `/v1/documents` e `/v1/events/ticket`. A implementação dessa API não pertence a esta árvore e precisa ser disponibilizada antes da sincronização real.
+O cliente espera os recursos clínicos versionados e os endpoints de autenticação, sincronização, upload e eventos em `apps/api`. A presença do código no monorepo não equivale a deploy: a API precisa ser configurada, publicada e homologada antes da sincronização real.
 
 ## Validação pendente
 
-Dependências não foram instaladas nesta etapa. Build Expo, testes no runtime nativo, biometria, notificações e validação em aparelho físico permanecem pendentes.
+Tipagem e testes unitários fazem parte dos gates do monorepo. Build nativo distribuível, testes no runtime nativo, biometria, notificações e validação em aparelho físico permanecem pendentes.
