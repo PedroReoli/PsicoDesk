@@ -1,0 +1,6 @@
+import { useCallback, useEffect, useState } from 'react';
+import { apiRequest } from '../api/client';
+import { useAuth } from '../auth/AuthProvider';
+import { readCache, replaceCache } from '../database/cacheRepository';
+import { useSync } from '../sync/SyncProvider';
+export function useOfflineResource<T extends { id: string; updatedAt: string }>(resource: string, path: string) { const { session } = useAuth(); const { online } = useSync(); const [data, setData] = useState<T[]>([]); const [loading, setLoading] = useState(true); const [refreshing, setRefreshing] = useState(false); const [error, setError] = useState<string | null>(null); const load = useCallback(async (refresh = false) => { if (!session) return; refresh ? setRefreshing(true) : setLoading(true); setError(null); try { const cached = await readCache<T>(resource); setData(cached); if (online) { const remote = await apiRequest<T[]>(path, { token: session.accessToken }); await replaceCache(resource, remote); setData(remote); } } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível carregar os dados.'); } finally { setLoading(false); setRefreshing(false); } }, [online, path, resource, session]); useEffect(() => { void load(); }, [load]); return { data, loading, refreshing, error, reload: () => load(true) }; }
