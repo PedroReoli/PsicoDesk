@@ -4,12 +4,21 @@
   "private": true,
   "type": "module",
   "main": "./dist/server.js",
+  "exports": {
+    "./testing": {
+      "types": "./dist/testing/test-app.d.ts",
+      "import": "./dist/testing/test-app.js"
+    }
+  },
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.json",
+    "bootstrap:clinic": "tsx src/bootstrap-clinic.ts",
+    "bootstrap:clinic:prod": "node dist/bootstrap-clinic.js",
     "migrate": "tsx src/migrate.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:server": "tsx src/testing/run-test-server.ts",
     "start": "node dist/server.js"
   },
   "dependencies": {
