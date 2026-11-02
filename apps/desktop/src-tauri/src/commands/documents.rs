@@ -231,26 +231,68 @@ pub fn export_document(
         Uuid::new_v4()
     );
     let destination = exports.join(file_name);
-    persist_export(&destination, &plaintext, || {
-        audit::record(
-            &db,
-            Some(&principal),
-            "document.exported",
-            "document",
-            Some(&document.id),
-            "success",
-            json!({"managedDirectory":"Documents/PsicoDesk/Documentos"}),
-        )
-    })
+    let destination_name = destination
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("documento.txt")
+        .to_string();
+    audited_export(
+        &destination,
+        &plaintext,
+        || {
+            audit::record(
+                &db,
+                Some(&principal),
+                "document.export_requested",
+                "document",
+                Some(&document.id),
+                "success",
+                json!({"phase":"intent","destination":destination_name}),
+            )
+        },
+        || {
+            audit::record(
+                &db,
+                Some(&principal),
+                "document.exported",
+                "document",
+                Some(&document.id),
+                "success",
+                json!({"managedDirectory":"Documents/PsicoDesk/Documentos"}),
+            )
+        },
+        |_| {
+            audit::record(
+                &db,
+                Some(&principal),
+                "document.export_failed",
+                "document",
+                Some(&document.id),
+                "failure",
+                json!({"phase":"publication"}),
+            )
+        },
+    )
     .map_err(CommandError::from)?;
     Ok(destination.to_string_lossy().into_owned())
 }
 
-fn persist_export(
+fn audited_export(
     destination: &Path,
     plaintext: &[u8],
-    audit_export: impl FnOnce() -> Result<(), AppError>,
+    record_intent: impl FnOnce() -> Result<(), AppError>,
+    record_success: impl FnOnce() -> Result<(), AppError>,
+    record_failure: impl FnOnce(&AppError) -> Result<(), AppError>,
 ) -> Result<(), AppError> {
+    record_intent()?;
+    if let Err(error) = persist_export(destination, plaintext) {
+        let _ = record_failure(&error);
+        return Err(error);
+    }
+    record_success()
+}
+
+fn persist_export(destination: &Path, plaintext: &[u8]) -> Result<(), AppError> {
     let temporary = destination.with_extension(format!("{}.tmp", Uuid::new_v4()));
     let result = (|| {
         let mut file = OpenOptions::new()
@@ -264,10 +306,6 @@ fn persist_export(
         if let Err(error) = fs::remove_file(&temporary) {
             let _ = fs::remove_file(destination);
             return Err(error.into());
-        }
-        if let Err(error) = audit_export() {
-            let _ = fs::remove_file(destination);
-            return Err(error);
         }
         Ok(())
     })();
@@ -319,14 +357,73 @@ mod tests {
     }
 
     #[test]
-    fn failed_audit_removes_plaintext_and_temporary_file() {
+    fn failed_intent_prevents_plaintext_publication() {
         let directory = tempfile::tempdir().expect("dir");
         let destination = directory.path().join("export.txt");
-        let result = persist_export(&destination, b"conteudo sensivel", || {
-            Err(AppError::Internal("audit unavailable".into()))
-        });
+        let result = audited_export(
+            &destination,
+            b"conteudo sensivel",
+            || Err(AppError::Internal("audit unavailable".into())),
+            || Ok(()),
+            |_| Ok(()),
+        );
         assert!(result.is_err());
         assert!(!destination.exists());
         assert_eq!(fs::read_dir(directory.path()).expect("list").count(), 0);
+    }
+
+    #[test]
+    fn publication_failure_keeps_durable_intent_and_no_temporary_plaintext() {
+        use std::cell::Cell;
+        let directory = tempfile::tempdir().expect("dir");
+        let destination = directory.path().join("export.txt");
+        fs::write(&destination, b"nao sobrescrever").expect("existing");
+        let intent = Cell::new(false);
+        let failure = Cell::new(false);
+        let result = audited_export(
+            &destination,
+            b"conteudo sensivel",
+            || {
+                intent.set(true);
+                Ok(())
+            },
+            || Ok(()),
+            |_| {
+                failure.set(true);
+                Ok(())
+            },
+        );
+        assert!(result.is_err());
+        assert!(intent.get());
+        assert!(failure.get());
+        assert_eq!(
+            fs::read(&destination).expect("existing"),
+            b"nao sobrescrever"
+        );
+        assert_eq!(fs::read_dir(directory.path()).expect("list").count(), 1);
+    }
+
+    #[test]
+    fn failed_completion_still_has_prior_intent_for_published_plaintext() {
+        use std::cell::Cell;
+        let directory = tempfile::tempdir().expect("dir");
+        let destination = directory.path().join("export.txt");
+        let intent = Cell::new(false);
+        let result = audited_export(
+            &destination,
+            b"conteudo sensivel",
+            || {
+                intent.set(true);
+                Ok(())
+            },
+            || Err(AppError::Internal("completion audit unavailable".into())),
+            |_| Ok(()),
+        );
+        assert!(result.is_err());
+        assert!(intent.get());
+        assert_eq!(
+            fs::read(&destination).expect("published"),
+            b"conteudo sensivel"
+        );
     }
 }
