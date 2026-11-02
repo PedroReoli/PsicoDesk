@@ -76,6 +76,17 @@ pub fn create_clinical_record(
         .database
         .lock()
         .map_err(|_| CommandError::from(AppError::Internal("database lock poisoned".into())))?;
+    if let Some(appointment_id) = input.appointment_id.as_deref() {
+        let appointment = db
+            .find_appointment(appointment_id)
+            .map_err(CommandError::from)?
+            .ok_or_else(|| CommandError::from(AppError::NotFound))?;
+        if appointment.patient_id != input.patient_id
+            || appointment.professional_id != principal.user_id
+        {
+            return Err(AppError::Forbidden.into());
+        }
+    }
     let record = db
         .insert_clinical_record(
             &input.patient_id,

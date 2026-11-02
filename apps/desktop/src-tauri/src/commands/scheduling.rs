@@ -93,6 +93,9 @@ pub fn create_appointment(
         return Err(AppError::Validation("Tipo de atendimento inválido.".into()).into());
     }
     if principal.role == Role::Psychologist {
+        if input.professional_id != principal.user_id {
+            return Err(AppError::Forbidden.into());
+        }
         input.professional_id = principal.user_id.clone();
     }
     input.starts_at = starts_at.to_rfc3339();
@@ -101,6 +104,13 @@ pub fn create_appointment(
         .database
         .lock()
         .map_err(|_| CommandError::from(AppError::Internal("database lock poisoned".into())))?;
+    if principal.role == Role::Psychologist
+        && !db
+            .professional_can_access_patient(&principal.user_id, &input.patient_id)
+            .map_err(CommandError::from)?
+    {
+        return Err(AppError::Forbidden.into());
+    }
     let appointment = db
         .insert_appointment(&input, &principal.user_id)
         .map_err(CommandError::from)?;
@@ -122,7 +132,7 @@ pub fn update_appointment_status(
     state: State<'_, AppState>,
     session_token: String,
     appointment_id: String,
-    input: UpdateAppointmentStatusInput,
+    mut input: UpdateAppointmentStatusInput,
 ) -> CommandResult<Appointment> {
     let principal = authenticate(&state, &session_token).map_err(CommandError::from)?;
     require(&principal, Permission::ManageSchedule).map_err(CommandError::from)?;
@@ -143,10 +153,30 @@ pub fn update_appointment_status(
     {
         return Err(AppError::Validation("Informe o motivo do cancelamento.".into()).into());
     }
+    match (input.starts_at.as_deref(), input.ends_at.as_deref()) {
+        (Some(starts), Some(ends)) => {
+            let starts = validation::utc_datetime(starts, "Início").map_err(CommandError::from)?;
+            let ends = validation::utc_datetime(ends, "Fim").map_err(CommandError::from)?;
+            if ends <= starts || ends - starts > chrono::Duration::hours(8) {
+                return Err(AppError::Validation("Período de remarcação inválido.".into()).into());
+            }
+            input.starts_at = Some(starts.to_rfc3339());
+            input.ends_at = Some(ends.to_rfc3339());
+        }
+        (None, None) => {}
+        _ => return Err(AppError::Validation("Informe início e fim da remarcação.".into()).into()),
+    }
     let db = state
         .database
         .lock()
         .map_err(|_| CommandError::from(AppError::Internal("database lock poisoned".into())))?;
+    if principal.role == Role::Psychologist
+        && !db
+            .professional_owns_appointment(&principal.user_id, &appointment_id)
+            .map_err(CommandError::from)?
+    {
+        return Err(AppError::Forbidden.into());
+    }
     let appointment = db
         .update_appointment_status(&appointment_id, &input)
         .map_err(CommandError::from)?;

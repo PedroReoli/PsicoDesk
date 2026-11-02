@@ -52,9 +52,21 @@ impl Database {
         id: &str,
         input: &UpdateAppointmentStatusInput,
     ) -> Result<Appointment, AppError> {
+        let current = self.find_appointment(id)?.ok_or(AppError::NotFound)?;
+        let starts_at = input.starts_at.as_deref().unwrap_or(&current.starts_at);
+        let ends_at = input.ends_at.as_deref().unwrap_or(&current.ends_at);
+        let conflict: bool = self.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM appointments WHERE id<>?1 AND professional_id=?2 AND status NOT IN ('cancelled','no_show') AND starts_at < ?4 AND ends_at > ?3)",
+            params![id, current.professional_id, starts_at, ends_at], |row| row.get(0),
+        )?;
+        if conflict {
+            return Err(AppError::Conflict(
+                "O profissional já possui atendimento nesse horário.".into(),
+            ));
+        }
         let changed = self.connection.execute(
-            "UPDATE appointments SET status=?2, cancellation_reason=?3, updated_at=?4, version=version+1 WHERE id=?1 AND version=?5",
-            params![id, input.status, input.cancellation_reason, Utc::now().to_rfc3339(), input.version],
+            "UPDATE appointments SET status=?2, cancellation_reason=?3, starts_at=?4, ends_at=?5, updated_at=?6, version=version+1 WHERE id=?1 AND version=?7",
+            params![id, input.status, input.cancellation_reason, starts_at, ends_at, Utc::now().to_rfc3339(), input.version],
         )?;
         if changed == 0 {
             return Err(AppError::Conflict(
@@ -69,6 +81,20 @@ impl Database {
             "SELECT a.id, a.patient_id, p.full_name, a.professional_id, u.display_name, a.starts_at, a.ends_at, a.status, a.kind, a.recurrence_id, a.cancellation_reason, a.version FROM appointments a JOIN patients p ON p.id=a.patient_id JOIN users u ON u.id=a.professional_id WHERE a.id=?1",
             [id], appointment_from_row,
         ).optional().map_err(AppError::from)
+    }
+
+    pub fn professional_owns_appointment(
+        &self,
+        professional_id: &str,
+        appointment_id: &str,
+    ) -> Result<bool, AppError> {
+        self.connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM appointments WHERE id=?1 AND professional_id=?2)",
+                params![appointment_id, professional_id],
+                |row| row.get(0),
+            )
+            .map_err(AppError::from)
     }
 }
 

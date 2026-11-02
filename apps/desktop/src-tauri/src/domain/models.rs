@@ -176,6 +176,8 @@ pub struct CreateAppointmentInput {
 pub struct UpdateAppointmentStatusInput {
     pub status: String,
     pub cancellation_reason: Option<String>,
+    pub starts_at: Option<String>,
+    pub ends_at: Option<String>,
     pub version: i64,
 }
 

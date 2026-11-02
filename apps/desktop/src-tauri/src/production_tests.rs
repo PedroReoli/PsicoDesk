@@ -101,11 +101,11 @@ fn critical_local_workflow_persists_and_rejects_invalid_transitions() {
             Some(&other_psychologist.id),
         )
         .expect("other patient");
-    database
+    let other_appointment = database
         .insert_appointment(
             &CreateAppointmentInput {
-                patient_id: other_patient.id,
-                professional_id: other_psychologist.id,
+                patient_id: other_patient.id.clone(),
+                professional_id: other_psychologist.id.clone(),
                 starts_at: "2026-11-03T14:00:00Z".into(),
                 ends_at: "2026-11-03T15:00:00Z".into(),
                 kind: "individual".into(),
@@ -114,6 +114,16 @@ fn critical_local_workflow_persists_and_rejects_invalid_transitions() {
             &owner.id,
         )
         .expect("other appointment");
+    assert!(!database
+        .professional_can_access_patient(&psychologist.id, &other_patient.id)
+        .expect("scope"));
+    assert!(!database
+        .professional_owns_appointment(&psychologist.id, &other_appointment.id)
+        .expect("ownership"));
+    assert_ne!(
+        other_appointment.patient_id, patient.id,
+        "prontuário não pode vincular atendimento de outro paciente"
+    );
     assert_eq!(
         database
             .list_appointments(
