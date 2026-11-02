@@ -1,5 +1,6 @@
 use std::{
-    fs,
+    fs::{self, OpenOptions},
+    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -230,24 +231,50 @@ pub fn export_document(
         Uuid::new_v4()
     );
     let destination = exports.join(file_name);
-    let temporary = destination.with_extension("tmp");
-    fs::write(&temporary, plaintext)
-        .map_err(AppError::from)
-        .map_err(CommandError::from)?;
-    fs::rename(&temporary, &destination)
-        .map_err(AppError::from)
-        .map_err(CommandError::from)?;
-    audit::record(
-        &db,
-        Some(&principal),
-        "document.exported",
-        "document",
-        Some(&document.id),
-        "success",
-        json!({"managedDirectory":"Documents/PsicoDesk/Documentos"}),
-    )
+    persist_export(&destination, &plaintext, || {
+        audit::record(
+            &db,
+            Some(&principal),
+            "document.exported",
+            "document",
+            Some(&document.id),
+            "success",
+            json!({"managedDirectory":"Documents/PsicoDesk/Documentos"}),
+        )
+    })
     .map_err(CommandError::from)?;
     Ok(destination.to_string_lossy().into_owned())
+}
+
+fn persist_export(
+    destination: &Path,
+    plaintext: &[u8],
+    audit_export: impl FnOnce() -> Result<(), AppError>,
+) -> Result<(), AppError> {
+    let temporary = destination.with_extension(format!("{}.tmp", Uuid::new_v4()));
+    let result = (|| {
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
+        file.write_all(plaintext)?;
+        file.sync_all()?;
+        drop(file);
+        fs::hard_link(&temporary, destination)?;
+        if let Err(error) = fs::remove_file(&temporary) {
+            let _ = fs::remove_file(destination);
+            return Err(error.into());
+        }
+        if let Err(error) = audit_export() {
+            let _ = fs::remove_file(destination);
+            return Err(error);
+        }
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
 }
 
 fn safe_document_path(directory: &Path, stored_name: &str) -> Result<PathBuf, AppError> {
@@ -289,5 +316,17 @@ mod tests {
         let directory = tempfile::tempdir().expect("dir");
         assert!(safe_document_path(directory.path(), "../arquivo.psd").is_err());
         assert!(safe_document_path(directory.path(), "nao-uuid.psd").is_err());
+    }
+
+    #[test]
+    fn failed_audit_removes_plaintext_and_temporary_file() {
+        let directory = tempfile::tempdir().expect("dir");
+        let destination = directory.path().join("export.txt");
+        let result = persist_export(&destination, b"conteudo sensivel", || {
+            Err(AppError::Internal("audit unavailable".into()))
+        });
+        assert!(result.is_err());
+        assert!(!destination.exists());
+        assert_eq!(fs::read_dir(directory.path()).expect("list").count(), 0);
     }
 }
