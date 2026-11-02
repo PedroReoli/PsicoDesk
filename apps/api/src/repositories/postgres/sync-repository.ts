@@ -21,6 +21,9 @@ export class PostgresSyncRepository implements SyncRepository {
           cursor = maxCursor(cursor, duplicate.rows[0].cursor);
           continue;
         }
+        await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+          `${clinicId}:${change.entityType}:${change.entityId}`,
+        ]);
         const head = await client.query<{ revision: number }>(
           'SELECT revision FROM sync_entity_heads WHERE clinic_id=$1 AND entity_type=$2 AND entity_id=$3 FOR UPDATE',
           [clinicId, change.entityType, change.entityId],

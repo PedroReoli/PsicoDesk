@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { SyncPush } from '@psicodesk/sync-protocol';
 import { errors } from '../domain/errors.js';
 import type { Principal, PullOutcome, PushOutcome } from '../domain/types.js';
@@ -10,6 +11,15 @@ export class SyncService {
   async push(principal: Principal, input: SyncPush): Promise<PushOutcome> {
     requireScope(principal, 'sync:write');
     if (input.deviceId !== principal.deviceId) throw errors.forbidden();
+    for (const change of input.changes) {
+      const payload = Buffer.from(change.payloadCiphertext, 'base64');
+      const canonical = payload.toString('base64').replace(/=+$/, '');
+      if (canonical !== change.payloadCiphertext.replace(/=+$/, ''))
+        throw errors.badRequest('Payload cifrado inválido.');
+      const digest = createHash('sha256').update(payload).digest('hex');
+      if (digest !== change.payloadHash.toLowerCase())
+        throw errors.badRequest('Hash do payload cifrado não confere.');
+    }
     return this.repository.push(principal.clinicId, principal.deviceId, input);
   }
 

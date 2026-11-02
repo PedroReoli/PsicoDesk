@@ -20,6 +20,8 @@ export class BatchService {
     const payload = Buffer.from(input.payloadBase64, 'base64');
     if (payload.byteLength === 0 || payload.byteLength > MAX_PAYLOAD_BYTES)
       throw errors.badRequest('Carga fora do limite permitido.');
+    if (stripPadding(payload.toString('base64')) !== stripPadding(input.payloadBase64))
+      throw errors.badRequest('Carga base64 inválida.');
     const digest = createHash('sha256').update(payload).digest('hex');
     if (digest.toLowerCase() !== input.contentHash.toLowerCase())
       throw errors.badRequest('Hash da carga não confere.');
@@ -80,6 +82,10 @@ export class BatchService {
     if (!(await this.repository.softDelete(principal.clinicId, principal.deviceId, batchId)))
       throw errors.notFound();
   }
+}
+
+function stripPadding(value: string): string {
+  return value.replace(/=+$/, '');
 }
 
 export function requireScope(principal: Principal, scope: Principal['scopes'][number]): void {
