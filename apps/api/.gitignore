@@ -1,4 +1,8 @@
 /dist/
 /coverage/
 .env
+.env.compose
+.runtime/
+ops/.env.production
+ops/Caddyfile
 
