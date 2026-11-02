@@ -120,3 +120,79 @@ export const createBatchJsonSchema = {
     payloadBase64: { type: 'string' },
   },
 } as const;
+
+export const syncChangeJsonSchema = {
+  type: 'object',
+  required: [
+    'changeId',
+    'entityType',
+    'entityId',
+    'operation',
+    'modifiedAt',
+    'encryption',
+    'payloadCiphertext',
+    'payloadHash',
+    'cursor',
+    'revision',
+    'sourceDeviceId',
+  ],
+  additionalProperties: false,
+  properties: {
+    changeId: { type: 'string', format: 'uuid' },
+    entityType: { type: 'string' },
+    entityId: { type: 'string', format: 'uuid' },
+    operation: { type: 'string', enum: ['upsert', 'delete'] },
+    modifiedAt: { type: 'string', format: 'date-time' },
+    encryption: encryptionMetadataJsonSchema,
+    payloadCiphertext: { type: 'string' },
+    payloadHash: { type: 'string' },
+    cursor: { type: 'string', pattern: '^\\d+$' },
+    revision: { type: 'integer' },
+    sourceDeviceId: { type: 'string', format: 'uuid' },
+  },
+} as const;
+
+export const syncConflictJsonSchema = {
+  type: 'object',
+  required: [
+    'conflictId',
+    'entityType',
+    'entityId',
+    'incomingChangeId',
+    'expectedRevision',
+    'currentRevision',
+    'createdAt',
+  ],
+  additionalProperties: false,
+  properties: {
+    conflictId: { type: 'string', format: 'uuid' },
+    entityType: { type: 'string' },
+    entityId: { type: 'string', format: 'uuid' },
+    incomingChangeId: { type: 'string', format: 'uuid' },
+    expectedRevision: { type: 'integer' },
+    currentRevision: { type: 'integer' },
+    createdAt: { type: 'string', format: 'date-time' },
+  },
+} as const;
+
+export const syncPushResultJsonSchema = {
+  type: 'object',
+  required: ['acceptedChangeIds', 'conflicts', 'cursor'],
+  additionalProperties: false,
+  properties: {
+    acceptedChangeIds: { type: 'array', items: { type: 'string', format: 'uuid' } },
+    conflicts: { type: 'array', items: syncConflictJsonSchema },
+    cursor: { type: 'string', pattern: '^\\d+$' },
+  },
+} as const;
+
+export const syncPullResultJsonSchema = {
+  type: 'object',
+  required: ['changes', 'nextCursor', 'hasMore'],
+  additionalProperties: false,
+  properties: {
+    changes: { type: 'array', items: syncChangeJsonSchema },
+    nextCursor: { type: 'string', pattern: '^\\d+$' },
+    hasMore: { type: 'boolean' },
+  },
+} as const;

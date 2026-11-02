@@ -3,7 +3,7 @@ import { cursorSchema, syncPushSchema } from '@psicodesk/sync-protocol';
 import { z } from 'zod';
 import type { RealtimeHub } from '../services/realtime-hub.js';
 import type { SyncService } from '../services/sync-service.js';
-import { securedResponses } from './schemas.js';
+import { securedResponses, syncPullResultJsonSchema, syncPushResultJsonSchema } from './schemas.js';
 
 const pullQuerySchema = z.object({
   cursor: cursorSchema,
@@ -19,8 +19,9 @@ export function syncRoutes(service: SyncService, realtime: RealtimeHub): Fastify
         schema: {
           tags: ['sync'],
           summary: 'Enviar alterações cifradas com controle de revisão',
+          deprecated: true,
           security: [{ bearerAuth: [] }],
-          response: { 200: { type: 'object' }, ...securedResponses },
+          response: { 200: syncPushResultJsonSchema, ...securedResponses },
         },
       },
       async (request) => {
@@ -41,6 +42,7 @@ export function syncRoutes(service: SyncService, realtime: RealtimeHub): Fastify
         schema: {
           tags: ['sync'],
           summary: 'Receber alterações cifradas após cursor',
+          deprecated: true,
           security: [{ bearerAuth: [] }],
           querystring: {
             type: 'object',
@@ -49,7 +51,7 @@ export function syncRoutes(service: SyncService, realtime: RealtimeHub): Fastify
               limit: { type: 'integer', minimum: 1, maximum: 500, default: 200 },
             },
           },
-          response: { 200: { type: 'object' }, ...securedResponses },
+          response: { 200: syncPullResultJsonSchema, ...securedResponses },
         },
       },
       async (request) => {

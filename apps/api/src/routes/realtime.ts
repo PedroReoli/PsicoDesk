@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { RealtimeHub } from '../services/realtime-hub.js';
 import type { RealtimeTicketService } from '../services/realtime-ticket-service.js';
 import { requireScope } from '../services/batch-service.js';
+import { securedResponses } from './schemas.js';
 
 const ticketQuerySchema = z.object({ ticket: z.string().min(32).max(512) });
 
@@ -29,6 +30,7 @@ export function realtimeRoutes(
                 expiresAt: { type: 'string', format: 'date-time' },
               },
             },
+            ...securedResponses,
           },
         },
       },

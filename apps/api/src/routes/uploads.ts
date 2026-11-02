@@ -33,7 +33,7 @@ export function uploadRoutes(service: UploadService): FastifyPluginAsync {
                 key: { type: 'string' },
                 url: { type: 'string' },
                 expiresAt: { type: 'string', format: 'date-time' },
-                requiredHeaders: { type: 'object' },
+                requiredHeaders: { type: 'object', additionalProperties: { type: 'string' } },
               },
             },
             ...securedResponses,
