@@ -32,6 +32,7 @@ export interface SyncConfig {
   targetDeviceId: string;
   peerSigningPublicKey: string;
   peerSigningKeyFingerprint: string;
+  keyId: string;
   enabled: boolean;
 }
 export interface SyncDeviceIdentity {

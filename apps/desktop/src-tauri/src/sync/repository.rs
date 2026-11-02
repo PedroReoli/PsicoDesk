@@ -9,7 +9,7 @@ use zeroize::Zeroizing;
 use crate::state::AppState;
 
 use super::{
-    models::{QueueItem, SyncConfig, TransferItem},
+    models::{BatchEnvelope, QueueItem, SyncConfig, TransferItem},
     SyncError,
 };
 
@@ -52,6 +52,10 @@ pub fn initialize_schema(state: &AppState) -> Result<(), SyncError> {
         "target_device_id",
         "TEXT NOT NULL DEFAULT ''",
     )?;
+    ensure_config_column(&database.connection, "key_id", "TEXT NOT NULL DEFAULT ''")?;
+    database.connection.execute_batch(
+        "CREATE TABLE IF NOT EXISTS sync_outbox(id INTEGER PRIMARY KEY CHECK(id=1), batch_id TEXT NOT NULL UNIQUE, envelope_json TEXT NOT NULL, queue_ids_json TEXT NOT NULL, created_at TEXT NOT NULL);",
+    )?;
     ensure_config_column(
         &database.connection,
         "peer_signing_public_key",
@@ -85,7 +89,7 @@ fn ensure_config_column(
 pub fn get_config(connection: &Connection) -> Result<Option<SyncConfig>, SyncError> {
     connection
         .query_row(
-            "SELECT endpoint, clinic_id, device_id, target_device_id, peer_signing_public_key, peer_signing_key_fingerprint, enabled FROM sync_config WHERE id = 1",
+            "SELECT endpoint, clinic_id, device_id, target_device_id, peer_signing_public_key, peer_signing_key_fingerprint, key_id, enabled FROM sync_config WHERE id = 1",
             [],
             |row| {
                 Ok(SyncConfig {
@@ -95,7 +99,8 @@ pub fn get_config(connection: &Connection) -> Result<Option<SyncConfig>, SyncErr
                     target_device_id: row.get(3)?,
                     peer_signing_public_key: row.get(4)?,
                     peer_signing_key_fingerprint: row.get(5)?,
-                    enabled: row.get::<_, i64>(6)? == 1,
+                    key_id: row.get(6)?,
+                    enabled: row.get::<_, i64>(7)? == 1,
                 })
             },
         )
@@ -105,12 +110,12 @@ pub fn get_config(connection: &Connection) -> Result<Option<SyncConfig>, SyncErr
 
 pub fn save_config(connection: &Connection, config: &SyncConfig) -> Result<(), SyncError> {
     connection.execute(
-        "INSERT INTO sync_config(id, endpoint, clinic_id, device_id, trusted_server_public_key, enabled, updated_at, target_device_id, peer_signing_public_key, peer_signing_key_fingerprint)
-         VALUES (1, ?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8)
+        "INSERT INTO sync_config(id, endpoint, clinic_id, device_id, trusted_server_public_key, enabled, updated_at, target_device_id, peer_signing_public_key, peer_signing_key_fingerprint, key_id)
+         VALUES (1, ?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8, ?9)
          ON CONFLICT(id) DO UPDATE SET endpoint=excluded.endpoint, clinic_id=excluded.clinic_id,
          device_id=excluded.device_id, enabled=excluded.enabled, updated_at=excluded.updated_at,
          target_device_id=excluded.target_device_id, peer_signing_public_key=excluded.peer_signing_public_key,
-         peer_signing_key_fingerprint=excluded.peer_signing_key_fingerprint",
+         peer_signing_key_fingerprint=excluded.peer_signing_key_fingerprint, key_id=excluded.key_id",
         params![
             config.endpoint,
             config.clinic_id,
@@ -120,7 +125,44 @@ pub fn save_config(connection: &Connection, config: &SyncConfig) -> Result<(), S
             config.target_device_id,
             config.peer_signing_public_key,
             config.peer_signing_key_fingerprint,
+            config.key_id,
         ],
+    )?;
+    Ok(())
+}
+
+pub fn save_outbox(
+    connection: &Connection,
+    envelope: &BatchEnvelope,
+    queue_ids: &[String],
+) -> Result<(), SyncError> {
+    connection.execute("INSERT OR REPLACE INTO sync_outbox(id,batch_id,envelope_json,queue_ids_json,created_at) VALUES(1,?1,?2,?3,?4)", params![envelope.batch_id, serde_json::to_string(envelope)?, serde_json::to_string(queue_ids)?, Utc::now().to_rfc3339()])?;
+    Ok(())
+}
+
+pub fn load_outbox(
+    connection: &Connection,
+) -> Result<Option<(BatchEnvelope, Vec<String>)>, SyncError> {
+    let row: Option<(String, String)> = connection
+        .query_row(
+            "SELECT envelope_json,queue_ids_json FROM sync_outbox WHERE id=1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    row.map(|(envelope, ids)| {
+        Ok((
+            serde_json::from_str(&envelope)?,
+            serde_json::from_str(&ids)?,
+        ))
+    })
+    .transpose()
+}
+
+pub fn clear_outbox(connection: &Connection, batch_id: &str) -> Result<(), SyncError> {
+    connection.execute(
+        "DELETE FROM sync_outbox WHERE id=1 AND batch_id=?1",
+        [batch_id],
     )?;
     Ok(())
 }
@@ -614,5 +656,39 @@ mod tests {
             cursor(&connection, "pull").expect("cursor").as_deref(),
             Some("7")
         );
+    }
+
+    #[test]
+    fn lost_push_response_reuses_persisted_batch_envelope() {
+        let connection = database();
+        connection.execute_batch("CREATE TABLE IF NOT EXISTS sync_outbox(id INTEGER PRIMARY KEY CHECK(id=1), batch_id TEXT NOT NULL UNIQUE, envelope_json TEXT NOT NULL, queue_ids_json TEXT NOT NULL, created_at TEXT NOT NULL);").expect("outbox");
+        let envelope = BatchEnvelope {
+            schema_version: 1,
+            batch_id: "6b43390a-9089-45ad-920b-a9d1af4d70c9".into(),
+            origin_device_id: "ee4e9f12-0a1f-4e59-aac6-44277b5786e9".into(),
+            target_device_id: "18cc9817-dbd6-4fc0-89a4-eda41c00e098".into(),
+            created_at: "2026-11-02T12:00:00Z".into(),
+            expires_at: "2026-11-02T12:10:00Z".into(),
+            content_hash: "a".repeat(64),
+            signature: "sig".into(),
+            signer_public_key: "pub".into(),
+            encryption: super::super::models::EncryptionMetadata {
+                algorithm: "aes-256-gcm".into(),
+                key_id: "clinic-key:v1".into(),
+                nonce: "nonce".into(),
+            },
+            payload_base64: "payload".into(),
+        };
+        let ids = vec!["queue-1".to_string()];
+        save_outbox(&connection, &envelope, &ids).expect("persist before post");
+        let (retried, retried_ids) = load_outbox(&connection)
+            .expect("load after restart")
+            .expect("outbox");
+        assert_eq!(retried.batch_id, envelope.batch_id);
+        assert_eq!(
+            serde_json::to_string(&retried).unwrap(),
+            serde_json::to_string(&envelope).unwrap()
+        );
+        assert_eq!(retried_ids, ids);
     }
 }

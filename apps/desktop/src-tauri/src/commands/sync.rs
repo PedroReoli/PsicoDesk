@@ -256,6 +256,12 @@ fn validate_config(input: UpdateSyncConfigInput) -> Result<SyncConfig, AppError>
         ));
     }
     let fingerprint = input.peer_signing_key_fingerprint.trim().to_lowercase();
+    let key_id = input.key_id.trim().to_string();
+    if key_id.len() < 3 || key_id.len() > 120 {
+        return Err(AppError::Validation(
+            "Identificador da chave de sincronização inválido.".into(),
+        ));
+    }
     let calculated = hex::encode(Sha256::digest(&decoded));
     if fingerprint.len() != 64
         || !fingerprint.bytes().all(|value| value.is_ascii_hexdigit())
@@ -272,6 +278,7 @@ fn validate_config(input: UpdateSyncConfigInput) -> Result<SyncConfig, AppError>
         target_device_id,
         peer_signing_public_key: public_key,
         peer_signing_key_fingerprint: fingerprint,
+        key_id,
         enabled: input.enabled,
     })
 }
@@ -304,6 +311,7 @@ mod tests {
             target_device_id: "18cc9817-dbd6-4fc0-89a4-eda41c00e098".into(),
             peer_signing_public_key: STANDARD.encode(key),
             peer_signing_key_fingerprint: hex::encode(Sha256::digest(key)),
+            key_id: "clinic-key:v1".into(),
             device_secret: Some("s".repeat(32)),
             enabled: true,
         };
@@ -320,6 +328,7 @@ mod tests {
             target_device_id: "18cc9817-dbd6-4fc0-89a4-eda41c00e098".into(),
             peer_signing_public_key: STANDARD.encode(key),
             peer_signing_key_fingerprint: hex::encode(Sha256::digest(key)),
+            key_id: "clinic-key:v1".into(),
             device_secret: Some("s".repeat(32)),
             enabled: true,
         };

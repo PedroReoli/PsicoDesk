@@ -6,7 +6,7 @@ import { settingsService } from '../services/settings.service';
 import type { SyncConfig, SyncDeviceIdentity, SyncStatus } from '../types/settings.types';
 import styles from '../styles/settings.module.css';
 
-const empty: SyncConfig = { endpoint: '', clinicId: '', deviceId: '', targetDeviceId: '', peerSigningPublicKey: '', peerSigningKeyFingerprint: '', enabled: false };
+const empty: SyncConfig = { endpoint: '', clinicId: '', deviceId: '', targetDeviceId: '', peerSigningPublicKey: '', peerSigningKeyFingerprint: '', keyId: '', enabled: false };
 
 export function SyncSettingsPanel() {
   const { session } = useAuthSession();
@@ -65,6 +65,7 @@ export function SyncSettingsPanel() {
         <Input label="ID do dispositivo pareado" value={config.targetDeviceId} onChange={(e) => { field('targetDeviceId', e.target.value); }} />
         <Input label="Chave pública do par" value={config.peerSigningPublicKey} onChange={(e) => { field('peerSigningPublicKey', e.target.value); }} />
         <Input label="Fingerprint do par" value={config.peerSigningKeyFingerprint} onChange={(e) => { field('peerSigningKeyFingerprint', e.target.value); }} />
+        <Input label="ID da chave compartilhada" value={config.keyId} onChange={(e) => { field('keyId', e.target.value); }} />
         <Input label="Segredo do dispositivo" type="password" value={deviceSecret} onChange={(e) => { setDeviceSecret(e.target.value); }} />
       </div>
       <div className={styles.userActions}><Button disabled={busy} variant={config.enabled ? 'secondary' : 'ghost'} onClick={() => { field('enabled', !config.enabled); }}>{config.enabled ? 'Sincronização habilitada' : 'Sincronização desabilitada'}</Button><Button disabled={busy} loading={busy} onClick={() => void save()}>Salvar pareamento</Button></div>

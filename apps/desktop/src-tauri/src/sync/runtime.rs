@@ -280,19 +280,29 @@ async fn run_once(context: &WorkerContext) -> Result<(), SyncError> {
     let client = SyncClient::new()?;
     validate_paired_peer(context, &client).await?;
     let connection = context.database.open()?;
-    let queue = repository::load_pending(&connection, 100)?;
-    let queue_ids: Vec<String> = queue.iter().map(|item| item.queue_id.clone()).collect();
-    if !queue.is_empty() {
-        repository::mark_sending(&connection, &queue_ids)?;
-    }
+    let existing_outbox = repository::load_outbox(&connection)?;
+    let (queue_ids, envelope) = if let Some((envelope, ids)) = existing_outbox {
+        (ids, Some(envelope))
+    } else {
+        let queue = repository::load_pending(&connection, 100)?;
+        let ids: Vec<String> = queue.iter().map(|item| item.queue_id.clone()).collect();
+        if queue.is_empty() {
+            (ids, None)
+        } else {
+            let envelope = build_envelope(context, &queue)?;
+            repository::mark_sending(&connection, &ids)?;
+            repository::save_outbox(&connection, &envelope, &ids)?;
+            (ids, Some(envelope))
+        }
+    };
     drop(connection);
 
-    if !queue.is_empty() {
-        let envelope = build_envelope(context, &queue)?;
+    if let Some(envelope) = envelope {
         match push_with_refresh(context, &client, &envelope).await {
             Ok(response) => {
                 let connection = context.database.open()?;
                 repository::mark_sent(&connection, &queue_ids, &response.delivery_cursor)?;
+                repository::clear_outbox(&connection, &envelope.batch_id)?;
             }
             Err(error) => {
                 let connection = context.database.open()?;
@@ -511,7 +521,7 @@ fn build_envelope(
         signer_public_key: String::new(),
         encryption: super::models::EncryptionMetadata {
             algorithm: "aes-256-gcm".into(),
-            key_id: format!("clinic:{}:v1", context.config.clinic_id),
+            key_id: context.config.key_id.clone(),
             nonce,
         },
         payload_base64: payload_ciphertext,
@@ -553,6 +563,11 @@ fn decode_envelope(
     if envelope.encryption.algorithm != "aes-256-gcm" {
         return Err(SyncError::InvalidBatch(
             "algoritmo de criptografia incompatível".into(),
+        ));
+    }
+    if envelope.encryption.key_id != context.config.key_id {
+        return Err(SyncError::InvalidBatch(
+            "identificador da chave de sincronização incompatível".into(),
         ));
     }
     crypto::verify_envelope(

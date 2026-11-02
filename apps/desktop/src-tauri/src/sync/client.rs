@@ -279,6 +279,7 @@ mod tests {
             target_device_id: "18cc9817-dbd6-4fc0-89a4-eda41c00e098".into(),
             peer_signing_public_key: "unused".into(),
             peer_signing_key_fingerprint: "0".repeat(64),
+            key_id: "clinic-key:v1".into(),
             enabled: true,
         }
     }

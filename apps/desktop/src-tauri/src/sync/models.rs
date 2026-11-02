@@ -12,6 +12,7 @@ pub struct SyncConfig {
     pub target_device_id: String,
     pub peer_signing_public_key: String,
     pub peer_signing_key_fingerprint: String,
+    pub key_id: String,
     pub enabled: bool,
 }
 
@@ -24,6 +25,7 @@ pub struct UpdateSyncConfigInput {
     pub target_device_id: String,
     pub peer_signing_public_key: String,
     pub peer_signing_key_fingerprint: String,
+    pub key_id: String,
     pub device_secret: Option<String>,
     pub enabled: bool,
 }
