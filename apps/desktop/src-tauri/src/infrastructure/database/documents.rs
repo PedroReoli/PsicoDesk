@@ -29,6 +29,28 @@ impl Database {
         rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
     }
 
+    pub fn list_documents_for_professional(
+        &self,
+        professional_id: &str,
+        patient_id: Option<&str>,
+    ) -> Result<Vec<Document>, AppError> {
+        let mut statement = self.connection.prepare("SELECT d.id,d.patient_id,p.full_name,d.title,d.document_type,d.template_version,d.encrypted_path,d.checksum,d.created_at FROM documents d LEFT JOIN patients p ON p.id=d.patient_id WHERE d.patient_id IS NOT NULL AND EXISTS(SELECT 1 FROM patient_professionals pp WHERE pp.patient_id=d.patient_id AND pp.professional_id=?1 AND pp.scope='clinical') AND (?2 IS NULL OR d.patient_id=?2) ORDER BY d.created_at DESC LIMIT 500")?;
+        let rows = statement.query_map(params![professional_id, patient_id], |row| {
+            Ok(Document {
+                id: row.get(0)?,
+                patient_id: row.get(1)?,
+                patient_name: row.get(2)?,
+                title: row.get(3)?,
+                document_type: row.get(4)?,
+                template_version: row.get(5)?,
+                encrypted_path: row.get(6)?,
+                checksum: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
+    }
+
     pub fn insert_document(
         &self,
         input: &RegisterDocumentInput,

@@ -28,5 +28,9 @@ export function useDocuments(patientId: string) {
     const document = await documentsService.generate(session.token, input);
     setDocuments((current) => [document, ...current]);
   }
-  return { documents, loading, error, reload: load, generate };
+  async function exportDocument(documentId: string) {
+    if (!session) throw new Error('Sessão expirada.');
+    return documentsService.export(session.token, documentId);
+  }
+  return { documents, loading, error, reload: load, generate, exportDocument };
 }

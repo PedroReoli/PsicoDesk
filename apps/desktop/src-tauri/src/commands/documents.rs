@@ -14,7 +14,7 @@ use crate::{
         validation,
     },
     commands::authenticate,
-    domain::models::{Document, GenerateDocumentInput, RegisterDocumentInput},
+    domain::models::{Document, GenerateDocumentInput, RegisterDocumentInput, Role},
     error::{AppError, CommandError, CommandResult},
     state::AppState,
 };
@@ -27,12 +27,16 @@ pub fn list_documents(
 ) -> CommandResult<Vec<Document>> {
     let principal = authenticate(&state, &session_token).map_err(CommandError::from)?;
     require(&principal, Permission::ManageDocuments).map_err(CommandError::from)?;
-    state
+    let db = state
         .database
         .lock()
-        .map_err(|_| CommandError::from(AppError::Internal("database lock poisoned".into())))?
-        .list_documents(patient_id.as_deref())
-        .map_err(Into::into)
+        .map_err(|_| CommandError::from(AppError::Internal("database lock poisoned".into())))?;
+    if principal.role == Role::Psychologist {
+        db.list_documents_for_professional(&principal.user_id, patient_id.as_deref())
+            .map_err(Into::into)
+    } else {
+        db.list_documents(patient_id.as_deref()).map_err(Into::into)
+    }
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -55,6 +59,22 @@ pub fn generate_document(
     }
     if input.template_version < 1 {
         return Err(AppError::Validation("Versão do template inválida.".into()).into());
+    }
+    if principal.role == Role::Psychologist {
+        let patient_id = input
+            .patient_id
+            .as_deref()
+            .ok_or_else(|| CommandError::from(AppError::Forbidden))?;
+        let db = state
+            .database
+            .lock()
+            .map_err(|_| CommandError::from(AppError::Internal("database lock poisoned".into())))?;
+        if !db
+            .professional_can_access_patient(&principal.user_id, patient_id)
+            .map_err(CommandError::from)?
+        {
+            return Err(AppError::Forbidden.into());
+        }
     }
 
     let file_name = format!("{}.psd", Uuid::new_v4());
@@ -120,4 +140,104 @@ pub fn generate_document(
     )
     .map_err(CommandError::from)?;
     Ok(document)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn export_document(
+    state: State<'_, AppState>,
+    session_token: String,
+    document_id: String,
+) -> CommandResult<String> {
+    let principal = authenticate(&state, &session_token).map_err(CommandError::from)?;
+    require(&principal, Permission::ManageDocuments).map_err(CommandError::from)?;
+    let db = state
+        .database
+        .lock()
+        .map_err(|_| CommandError::from(AppError::Internal("database lock poisoned".into())))?;
+    let document = db
+        .list_documents(None)
+        .map_err(CommandError::from)?
+        .into_iter()
+        .find(|item| item.id == document_id)
+        .ok_or_else(|| CommandError::from(AppError::NotFound))?;
+    if principal.role == Role::Psychologist {
+        let patient_id = document
+            .patient_id
+            .as_deref()
+            .ok_or_else(|| CommandError::from(AppError::Forbidden))?;
+        if !db
+            .professional_can_access_patient(&principal.user_id, patient_id)
+            .map_err(CommandError::from)?
+        {
+            return Err(AppError::Forbidden.into());
+        }
+    }
+    let encrypted = fs::read(
+        state
+            .data_dir
+            .join("documents")
+            .join(&document.encrypted_path),
+    )
+    .map_err(AppError::from)
+    .map_err(CommandError::from)?;
+    if encrypted.len() < 16 || &encrypted[..4] != b"PSD1" {
+        return Err(AppError::Security("Documento protegido inválido.".into()).into());
+    }
+    let mut key_hasher = Sha256::new();
+    key_hasher.update(b"PsicoDesk documents v1\0");
+    key_hasher.update(state.database_key.as_slice());
+    let cipher = Aes256Gcm::new_from_slice(&key_hasher.finalize()).map_err(|_| {
+        CommandError::from(AppError::Security("Chave de documento inválida.".into()))
+    })?;
+    let plaintext = cipher
+        .decrypt(Nonce::from_slice(&encrypted[4..16]), &encrypted[16..])
+        .map_err(|_| {
+            CommandError::from(AppError::Security(
+                "Documento não pôde ser autenticado.".into(),
+            ))
+        })?;
+    let exports = state.data_dir.join("exports");
+    fs::create_dir_all(&exports)
+        .map_err(AppError::from)
+        .map_err(CommandError::from)?;
+    let safe_title: String = document
+        .title
+        .chars()
+        .map(|character| {
+            if character.is_alphanumeric() || matches!(character, '-' | '_') {
+                character
+            } else {
+                '_'
+            }
+        })
+        .take(80)
+        .collect();
+    let file_name = format!(
+        "{}-{}.txt",
+        if safe_title.is_empty() {
+            "documento"
+        } else {
+            &safe_title
+        },
+        document.id
+    );
+    let destination = exports.join(file_name);
+    let temporary = destination.with_extension("tmp");
+    fs::write(&temporary, plaintext)
+        .map_err(AppError::from)
+        .map_err(CommandError::from)?;
+    fs::rename(&temporary, &destination)
+        .map_err(AppError::from)
+        .map_err(CommandError::from)?;
+    audit::record(
+        &db,
+        Some(&principal),
+        "document.exported",
+        "document",
+        Some(&document.id),
+        "success",
+        json!({"managedDirectory":"exports"}),
+    )
+    .map_err(CommandError::from)?;
+    Ok(destination.to_string_lossy().into_owned())
 }

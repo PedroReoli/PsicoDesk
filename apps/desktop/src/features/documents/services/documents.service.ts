@@ -8,4 +8,6 @@ export const documentsService = {
     }),
   generate: (sessionToken: string, input: GenerateDocumentInput) =>
     invokeCommand<ClinicDocument>('generate_document', { sessionToken, input }),
+  export: (sessionToken: string, documentId: string) =>
+    invokeCommand<string>('export_document', { sessionToken, documentId }),
 };

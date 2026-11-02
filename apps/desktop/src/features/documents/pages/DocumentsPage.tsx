@@ -3,7 +3,8 @@ import { PageHeader } from '../../../design-system/composites/PageHeader';
 import { RightPanel } from '../../../design-system/composites/RightPanel';
 import { EmptyState } from '../../../design-system/composites/EmptyState';
 import { Button } from '../../../design-system/primitives/Button';
-import { Input } from '../../../design-system/primitives/Input';
+import { OptionPicker } from '../../../shared/components/OptionPicker';
+import { useDirectoryOptions } from '../../../shared/hooks/useDirectoryOptions';
 import { Badge } from '../../../design-system/primitives/Badge';
 import { DocumentForm } from '../components/DocumentForm';
 import { useDocuments } from '../hooks/useDocuments';
@@ -18,7 +19,9 @@ const typeLabel = {
 export default function DocumentsPage() {
   const [patientId, setPatientId] = useState('');
   const [panel, setPanel] = useState(false);
-  const { documents, loading, error, reload, generate } = useDocuments(patientId);
+  const [exported, setExported] = useState('');
+  const patients = useDirectoryOptions('patients');
+  const { documents, loading, error, reload, generate, exportDocument } = useDocuments(patientId);
   return (
     <section className={styles.page}>
       <PageHeader
@@ -36,12 +39,14 @@ export default function DocumentsPage() {
         }
       />
       <div className={styles.filter}>
-        <Input
-          label="Filtrar por ID do paciente"
+        <OptionPicker
+          label="Filtrar por paciente"
+          options={patients.options}
           value={patientId}
-          onChange={(event) => {
-            setPatientId(event.target.value);
-          }}
+          onChange={setPatientId}
+          loading={patients.loading}
+          error={patients.error}
+          emptyLabel="Todos os pacientes"
         />
       </div>
       {loading ? (
@@ -79,10 +84,12 @@ export default function DocumentsPage() {
                 {new Date(document.createdAt).toLocaleDateString('pt-BR')}
               </p>
               <small>Integridade {document.checksum.slice(0, 10)}…</small>
+              <Button variant="ghost" onClick={() => void exportDocument(document.id).then(setExported)}>Exportar cópia legível</Button>
             </article>
           ))}
         </div>
       )}
+      {exported && <p role="status">Documento exportado para a pasta gerenciada: {exported}</p>}
       <RightPanel
         open={panel}
         title="Gerar documento"
