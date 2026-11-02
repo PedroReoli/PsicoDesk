@@ -16,6 +16,7 @@ interface BatchRow {
   expires_at: Date;
   received_at: Date;
   acknowledged_at: Date | null;
+  result_hash: string | null;
   content_hash: string;
   signature: string;
   signer_public_key: string;
@@ -129,7 +130,21 @@ export class PostgresBatchRepository implements BatchRepository {
        WHERE clinic_id=$1 AND batch_id=$2 AND target_device_id=$3 AND status IN ('pending','downloaded') RETURNING *`,
       [clinicId, batchId, deviceId, input.status, input.importedAt, input.resultHash ?? null],
     );
-    return result.rows[0] ? mapBatch(result.rows[0]) : null;
+    if (result.rows[0]) return mapBatch(result.rows[0]);
+
+    const existing = await this.database.query<BatchRow>(
+      'SELECT * FROM batches WHERE clinic_id=$1 AND batch_id=$2 AND target_device_id=$3',
+      [clinicId, batchId, deviceId],
+    );
+    const row = existing.rows[0];
+    if (!row) return null;
+    const sameAcknowledgement =
+      row.status === input.status &&
+      row.acknowledged_at?.getTime() === new Date(input.importedAt).getTime() &&
+      row.result_hash === (input.resultHash ?? null);
+    if (!sameAcknowledgement)
+      throw errors.conflict('O lote já recebeu uma confirmação terminal divergente.');
+    return mapBatch(row);
   }
 
   async softDelete(clinicId: string, deviceId: string, batchId: string): Promise<boolean> {

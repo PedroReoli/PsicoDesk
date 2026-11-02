@@ -95,6 +95,7 @@ export class MemoryBatchRepository implements BatchRepository {
   readonly batches = new Map<string, StoredBatch>();
   readonly activeTargets = new Set<string>();
   private readonly idempotency = new Map<string, { batchId: string; hash: string }>();
+  private readonly acknowledgements = new Map<string, AcknowledgeBatch>();
   private cursor = 0;
 
   seedTarget(clinicId: string, deviceId: string): void {
@@ -175,14 +176,21 @@ export class MemoryBatchRepository implements BatchRepository {
 
   async acknowledge(clinicId: string, deviceId: string, batchId: string, input: AcknowledgeBatch) {
     const batch = this.batches.get(key(clinicId, batchId));
-    if (
-      !batch ||
-      batch.targetDeviceId !== deviceId ||
-      !['pending', 'downloaded'].includes(batch.status)
-    )
-      return null;
+    if (!batch || batch.targetDeviceId !== deviceId) return null;
+    const acknowledgementKey = key(clinicId, batchId);
+    if (!['pending', 'downloaded'].includes(batch.status)) {
+      const existing = this.acknowledgements.get(acknowledgementKey);
+      if (
+        existing?.status === input.status &&
+        existing.importedAt === input.importedAt &&
+        existing.resultHash === input.resultHash
+      )
+        return batch;
+      throw errors.conflict('O lote já recebeu uma confirmação terminal divergente.');
+    }
     batch.status = input.status;
     batch.acknowledgedAt = input.importedAt;
+    this.acknowledgements.set(acknowledgementKey, { ...input });
     return batch;
   }
 

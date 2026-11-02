@@ -168,16 +168,24 @@ describe('PsicoDesk API canônica', () => {
     expect(ack.statusCode).toBe(200);
     expect(ack.json()).toMatchObject({ batchId: batch.batchId, status: 'applied' });
     expect(ack.json()).not.toHaveProperty('payloadBase64');
+    const retriedAck = await built.app.inject({
+      method: 'POST',
+      url: `/v1/batches/${batch.batchId}/ack`,
+      headers: bearer(receiverToken),
+      payload: { status: 'applied', importedAt: deterministicFixture.now },
+    });
+    expect(retriedAck.statusCode).toBe(200);
+    expect(retriedAck.json()).toMatchObject({ batchId: batch.batchId, status: 'applied' });
     expect(
       (
         await built.app.inject({
           method: 'POST',
           url: `/v1/batches/${batch.batchId}/ack`,
           headers: bearer(receiverToken),
-          payload: { status: 'applied', importedAt: deterministicFixture.now },
+          payload: { status: 'rejected', importedAt: deterministicFixture.now },
         })
       ).statusCode,
-    ).toBe(404);
+    ).toBe(409);
     expect(
       (
         await built.app.inject({
@@ -187,6 +195,55 @@ describe('PsicoDesk API canônica', () => {
         })
       ).statusCode,
     ).toBe(204);
+  });
+
+  it('repete ACK após perda da resposta sem divergir o estado terminal', async () => {
+    const batch = makeBatch(Buffer.from('ack-lost-response'));
+    const resultHash = createHash('sha256').update('projection-result').digest('hex');
+    expect(
+      (
+        await built.app.inject({
+          method: 'POST',
+          url: '/v1/batches',
+          headers: {
+            ...bearer(senderToken),
+            'idempotency-key': 'batch-ack-lost-response-0001',
+          },
+          payload: batch,
+        })
+      ).statusCode,
+    ).toBe(201);
+
+    const acknowledgement = {
+      status: 'applied',
+      importedAt: deterministicFixture.now,
+      resultHash,
+    } as const;
+    const first = await built.app.inject({
+      method: 'POST',
+      url: `/v1/batches/${batch.batchId}/ack`,
+      headers: bearer(receiverToken),
+      payload: acknowledgement,
+    });
+    expect(first.statusCode).toBe(200);
+
+    // Simula o cliente não ter recebido `first` e reenviar exatamente o mesmo ACK.
+    const retry = await built.app.inject({
+      method: 'POST',
+      url: `/v1/batches/${batch.batchId}/ack`,
+      headers: bearer(receiverToken),
+      payload: acknowledgement,
+    });
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json()).toMatchObject({ batchId: batch.batchId, status: 'applied' });
+
+    const divergent = await built.app.inject({
+      method: 'POST',
+      url: `/v1/batches/${batch.batchId}/ack`,
+      headers: bearer(receiverToken),
+      payload: { ...acknowledgement, resultHash: 'f'.repeat(64) },
+    });
+    expect(divergent.statusCode).toBe(409);
   });
 
   it('rejeita signer não pareado, destino cross-tenant e colisão idempotente', async () => {
