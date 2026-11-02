@@ -17,18 +17,55 @@ interface DataTableProps<T> {
   onRowClick?: (row: T) => void;
 }
 
-export function DataTable<T>({ caption, columns, rows, getRowKey, emptyState, onRowClick }: DataTableProps<T>) {
+export function DataTable<T>({
+  caption,
+  columns,
+  rows,
+  getRowKey,
+  emptyState,
+  onRowClick,
+}: DataTableProps<T>) {
   if (rows.length === 0 && emptyState) return <>{emptyState}</>;
 
   return (
     <div className={styles.scroller}>
       <table className={styles.table}>
         <caption className="sr-only">{caption}</caption>
-        <thead><tr>{columns.map((column) => <th key={column.key} className={styles[column.align ?? 'start']}>{column.header}</th>)}</tr></thead>
+        <thead>
+          <tr>
+            {columns.map((column) => (
+              <th key={column.key} className={styles[column.align ?? 'start']}>
+                {column.header}
+              </th>
+            ))}
+          </tr>
+        </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={getRowKey(row)} onClick={onRowClick ? () => { onRowClick(row); } : undefined} className={onRowClick ? styles.clickable : undefined} tabIndex={onRowClick ? 0 : undefined} onKeyDown={onRowClick ? (event) => { if (event.key === 'Enter' || event.key === ' ') onRowClick(row); } : undefined}>
-              {columns.map((column) => <td key={column.key} className={styles[column.align ?? 'start']}>{column.render(row)}</td>)}
+            <tr
+              key={getRowKey(row)}
+              onClick={
+                onRowClick
+                  ? () => {
+                      onRowClick(row);
+                    }
+                  : undefined
+              }
+              className={onRowClick ? styles.clickable : undefined}
+              tabIndex={onRowClick ? 0 : undefined}
+              onKeyDown={
+                onRowClick
+                  ? (event) => {
+                      if (event.key === 'Enter' || event.key === ' ') onRowClick(row);
+                    }
+                  : undefined
+              }
+            >
+              {columns.map((column) => (
+                <td key={column.key} className={styles[column.align ?? 'start']}>
+                  {column.render(row)}
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>
@@ -36,4 +73,3 @@ export function DataTable<T>({ caption, columns, rows, getRowKey, emptyState, on
     </div>
   );
 }
-

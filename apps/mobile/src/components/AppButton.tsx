@@ -1,7 +1,53 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, type PressableProps } from 'react-native';
 import { colors, radius, spacing, typography } from '../theme/tokens';
-interface Props extends PressableProps { label: string; loading?: boolean; tone?: 'primary' | 'secondary' | 'danger'; }
-export function AppButton({ label, loading = false, tone = 'primary', disabled, style, ...props }: Props) {
-  return <Pressable accessibilityRole="button" accessibilityState={{ disabled: disabled || loading, busy: loading }} disabled={disabled || loading} style={(state) => [styles.base, styles[tone], state.pressed && styles.pressed, disabled && styles.disabled, typeof style === 'function' ? style(state) : style]} {...props}>{loading ? <ActivityIndicator color={tone === 'secondary' ? colors.brand : colors.surface} /> : <Text style={[styles.label, tone === 'secondary' && styles.secondaryLabel]}>{label}</Text>}</Pressable>;
+interface Props extends PressableProps {
+  label: string;
+  loading?: boolean;
+  tone?: 'primary' | 'secondary' | 'danger';
 }
-const styles = StyleSheet.create({ base: { minHeight: 48, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, borderRadius: radius.md }, primary: { backgroundColor: colors.brand }, secondary: { backgroundColor: colors.brandSoft, borderWidth: 1, borderColor: colors.brand }, danger: { backgroundColor: colors.danger }, label: { color: colors.surface, fontSize: typography.body, fontWeight: '700' }, secondaryLabel: { color: colors.brandDark }, pressed: { opacity: 0.82, transform: [{ scale: 0.98 }] }, disabled: { opacity: 0.5 } });
+export function AppButton({
+  label,
+  loading = false,
+  tone = 'primary',
+  disabled,
+  style,
+  ...props
+}: Props) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled: disabled || loading, busy: loading }}
+      disabled={disabled || loading}
+      style={(state) => [
+        styles.base,
+        styles[tone],
+        state.pressed && styles.pressed,
+        disabled && styles.disabled,
+        typeof style === 'function' ? style(state) : style,
+      ]}
+      {...props}
+    >
+      {loading ? (
+        <ActivityIndicator color={tone === 'secondary' ? colors.brand : colors.surface} />
+      ) : (
+        <Text style={[styles.label, tone === 'secondary' && styles.secondaryLabel]}>{label}</Text>
+      )}
+    </Pressable>
+  );
+}
+const styles = StyleSheet.create({
+  base: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+    borderRadius: radius.md,
+  },
+  primary: { backgroundColor: colors.brand },
+  secondary: { backgroundColor: colors.brandSoft, borderWidth: 1, borderColor: colors.brand },
+  danger: { backgroundColor: colors.danger },
+  label: { color: colors.surface, fontSize: typography.body, fontWeight: '700' },
+  secondaryLabel: { color: colors.brandDark },
+  pressed: { opacity: 0.82, transform: [{ scale: 0.98 }] },
+  disabled: { opacity: 0.5 },
+});

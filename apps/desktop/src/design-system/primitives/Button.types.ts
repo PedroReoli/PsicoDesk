@@ -6,4 +6,3 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   loading?: boolean;
   fullWidth?: boolean;
 }
-

@@ -18,13 +18,23 @@ export function AppShell({ userDisplayName, userRole, onLogout }: AppShellProps)
 
   return (
     <div className={styles.shell}>
-      <a className={styles.skipLink} href="#main-content">Pular para o conteúdo</a>
-      <Sidebar collapsed={collapsed} userDisplayName={userDisplayName} userRole={userRole} onToggle={() => { setCollapsed((value) => !value); }} />
+      <a className={styles.skipLink} href="#main-content">
+        Pular para o conteúdo
+      </a>
+      <Sidebar
+        collapsed={collapsed}
+        userDisplayName={userDisplayName}
+        userRole={userRole}
+        onToggle={() => {
+          setCollapsed((value) => !value);
+        }}
+      />
       <div className={styles.workspace}>
         <AppHeader userDisplayName={userDisplayName} onLogout={onLogout} />
-        <ContentArea><Outlet /></ContentArea>
+        <ContentArea>
+          <Outlet />
+        </ContentArea>
       </div>
     </div>
   );
 }
-

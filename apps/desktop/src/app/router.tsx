@@ -30,7 +30,11 @@ function authorized(path: string, element: ReactNode) {
 export const appRouter = createHashRouter([
   {
     path: '/',
-    element: <AuthGate><AuthenticatedAppShell /></AuthGate>,
+    element: (
+      <AuthGate>
+        <AuthenticatedAppShell />
+      </AuthGate>
+    ),
     errorElement: <RouteError />,
     children: [
       { index: true, element: <Navigate to="/dashboard" replace /> },
@@ -46,4 +50,3 @@ export const appRouter = createHashRouter([
     ],
   },
 ]);
-

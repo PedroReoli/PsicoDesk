@@ -15,7 +15,13 @@
     "newArchEnabled": true,
     "plugins": [
       "expo-router",
-      ["expo-secure-store", { "configureAndroidBackup": true, "faceIDPermission": "Permita ao PsicoDesk proteger o acesso aos dados da clínica." }]
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": "Permita ao PsicoDesk proteger o acesso aos dados da clínica."
+        }
+      ]
     ],
     "ios": {
       "supportsTablet": true,

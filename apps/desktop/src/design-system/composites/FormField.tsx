@@ -13,10 +13,18 @@ interface FormFieldProps {
 export function FormField({ label, htmlFor, required, hint, error, children }: FormFieldProps) {
   return (
     <div className={styles.field}>
-      <label htmlFor={htmlFor}>{label}{required && <span aria-hidden="true"> *</span>}</label>
+      <label htmlFor={htmlFor}>
+        {label}
+        {required && <span aria-hidden="true"> *</span>}
+      </label>
       {children}
-      {error ? <p className={styles.error} role="alert">{error}</p> : hint ? <p className={styles.hint}>{hint}</p> : null}
+      {error ? (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      ) : hint ? (
+        <p className={styles.hint}>{hint}</p>
+      ) : null}
     </div>
   );
 }
-

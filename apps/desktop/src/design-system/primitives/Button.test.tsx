@@ -21,4 +21,3 @@ describe('Button', () => {
     expect(screen.getByRole('button', { name: 'Salvando' })).toHaveAttribute('aria-busy', 'true');
   });
 });
-

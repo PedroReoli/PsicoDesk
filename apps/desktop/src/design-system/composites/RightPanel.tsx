@@ -15,7 +15,15 @@ interface RightPanelProps {
   onClose?: (() => void) | undefined;
 }
 
-export function RightPanel({ open, title, description, width = 'sm', children, footer, onClose }: RightPanelProps) {
+export function RightPanel({
+  open,
+  title,
+  description,
+  width = 'sm',
+  children,
+  footer,
+  onClose,
+}: RightPanelProps) {
   if (!open) return null;
 
   return (
@@ -36,4 +44,3 @@ export function RightPanel({ open, title, description, width = 'sm', children, f
     </aside>
   );
 }
-

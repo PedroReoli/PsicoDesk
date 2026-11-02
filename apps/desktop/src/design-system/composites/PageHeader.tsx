@@ -21,4 +21,3 @@ export function PageHeader({ title, description, eyebrow, actions }: PageHeaderP
     </header>
   );
 }
-

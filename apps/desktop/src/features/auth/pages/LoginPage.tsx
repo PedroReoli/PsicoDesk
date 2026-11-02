@@ -24,26 +24,76 @@ export function LoginPage() {
   return (
     <main className={styles.page}>
       <section className={styles.brand} aria-labelledby="welcome-title">
-        <span className={styles.mark} aria-hidden="true">Ψ</span>
+        <span className={styles.mark} aria-hidden="true">
+          Ψ
+        </span>
         <p>PsicoDesk</p>
         <h1 id="welcome-title">A clínica organizada, com os dados no seu computador.</h1>
         <p>Agenda, pacientes, prontuários e financeiro em uma experiência offline e protegida.</p>
       </section>
       <section className={styles.card} aria-label="Acesso ao PsicoDesk">
         <div className={styles.mode} role="group" aria-label="Tipo de acesso">
-          <Button variant={firstAccess ? 'ghost' : 'primary'} onClick={() => { setFirstAccess(false); }}>Entrar</Button>
-          <Button variant={firstAccess ? 'primary' : 'ghost'} onClick={() => { setFirstAccess(true); }}>Primeiro acesso</Button>
+          <Button
+            variant={firstAccess ? 'ghost' : 'primary'}
+            onClick={() => {
+              setFirstAccess(false);
+            }}
+          >
+            Entrar
+          </Button>
+          <Button
+            variant={firstAccess ? 'primary' : 'ghost'}
+            onClick={() => {
+              setFirstAccess(true);
+            }}
+          >
+            Primeiro acesso
+          </Button>
         </div>
         <div>
           <p className={styles.eyebrow}>{firstAccess ? 'Configuração inicial' : 'Área segura'}</p>
           <h2>{firstAccess ? 'Criar administrador local' : 'Boas-vindas de volta'}</h2>
         </div>
         <form className={styles.form} onSubmit={submit}>
-          {firstAccess && <Input label="Nome de exibição" value={displayName} onChange={(event) => { setDisplayName(event.target.value); }} required autoComplete="name" />}
-          <Input label="Usuário" value={username} onChange={(event) => { setUsername(event.target.value); }} required autoComplete="username" />
-          <Input label="Senha" type="password" value={password} onChange={(event) => { setPassword(event.target.value); }} minLength={10} required autoComplete={firstAccess ? 'new-password' : 'current-password'} />
-          {error && <p className={styles.error} role="alert">{error}</p>}
-          <Button type="submit" loading={busy} fullWidth>{firstAccess ? 'Criar acesso seguro' : 'Entrar no PsicoDesk'}</Button>
+          {firstAccess && (
+            <Input
+              label="Nome de exibição"
+              value={displayName}
+              onChange={(event) => {
+                setDisplayName(event.target.value);
+              }}
+              required
+              autoComplete="name"
+            />
+          )}
+          <Input
+            label="Usuário"
+            value={username}
+            onChange={(event) => {
+              setUsername(event.target.value);
+            }}
+            required
+            autoComplete="username"
+          />
+          <Input
+            label="Senha"
+            type="password"
+            value={password}
+            onChange={(event) => {
+              setPassword(event.target.value);
+            }}
+            minLength={10}
+            required
+            autoComplete={firstAccess ? 'new-password' : 'current-password'}
+          />
+          {error && (
+            <p className={styles.error} role="alert">
+              {error}
+            </p>
+          )}
+          <Button type="submit" loading={busy} fullWidth>
+            {firstAccess ? 'Criar acesso seguro' : 'Entrar no PsicoDesk'}
+          </Button>
         </form>
       </section>
     </main>

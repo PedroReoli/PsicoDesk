@@ -12,8 +12,13 @@ export function RouteError() {
       <span className={styles.errorCode}>Algo saiu do fluxo</span>
       <h1>Não conseguimos carregar esta tela</h1>
       <p>{detail}</p>
-      <Button onClick={() => { window.location.assign('#/dashboard'); }}>Voltar ao dashboard</Button>
+      <Button
+        onClick={() => {
+          window.location.assign('#/dashboard');
+        }}
+      >
+        Voltar ao dashboard
+      </Button>
     </main>
   );
 }
-

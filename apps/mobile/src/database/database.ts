@@ -35,7 +35,16 @@ async function initializeDatabase() {
     );
   `);
   const columns = await database.getAllAsync<{ name: string }>('PRAGMA table_info(mutation_queue)');
-  if (!columns.some((column) => column.name === 'status')) await database.execAsync("ALTER TABLE mutation_queue ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'");
+  if (!columns.some((column) => column.name === 'status'))
+    await database.execAsync(
+      "ALTER TABLE mutation_queue ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'",
+    );
   return database;
 }
-export async function getDatabase() { databasePromise ??= initializeDatabase().catch((cause) => { databasePromise = null; throw cause; }); return databasePromise; }
+export async function getDatabase() {
+  databasePromise ??= initializeDatabase().catch((cause) => {
+    databasePromise = null;
+    throw cause;
+  });
+  return databasePromise;
+}

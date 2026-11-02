@@ -1,9 +1,76 @@
 import NetInfo from '@react-native-community/netinfo';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type PropsWithChildren,
+} from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import { ReconnectingSocket } from './ReconnectingSocket';
 import { drainMutationQueue, queueCounts } from './mutationQueue';
-interface SyncValue { online: boolean; connected: boolean; syncing: boolean; pending: number; failed: number; lastSyncAt: string | null; syncNow: () => Promise<void>; }
+interface SyncValue {
+  online: boolean;
+  connected: boolean;
+  syncing: boolean;
+  pending: number;
+  failed: number;
+  lastSyncAt: string | null;
+  syncNow: () => Promise<void>;
+}
 const SyncContext = createContext<SyncValue | null>(null);
-export function SyncProvider({ children }: PropsWithChildren) { const { session } = useAuth(); const [online, setOnline] = useState(true); const [connected, setConnected] = useState(false); const [syncing, setSyncing] = useState(false); const [pending, setPending] = useState(0); const [failed, setFailed] = useState(0); const [lastSyncAt, setLastSyncAt] = useState<string | null>(null); const applyCounts = useCallback((counts: { pending: number; failed: number }) => { setPending(counts.pending); setFailed(counts.failed); }, []); const syncNow = useCallback(async () => { if (!session || !online || syncing) return; setSyncing(true); try { applyCounts(await drainMutationQueue(session.accessToken)); setLastSyncAt(new Date().toISOString()); } finally { setSyncing(false); } }, [session, online, syncing, applyCounts]); useEffect(() => { void queueCounts().then(applyCounts); return NetInfo.addEventListener((state) => { const next = Boolean(state.isConnected && state.isInternetReachable !== false); setOnline(next); if (next) void syncNow(); }); }, [syncNow, applyCounts]); useEffect(() => { if (!session) return; const socket = new ReconnectingSocket(session.accessToken, () => { void syncNow(); }, setConnected); socket.start(); return () => socket.stop(); }, [session, syncNow]); const value = useMemo(() => ({ online, connected, syncing, pending, failed, lastSyncAt, syncNow }), [online, connected, syncing, pending, failed, lastSyncAt, syncNow]); return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>; }
-export function useSync() { const value = useContext(SyncContext); if (!value) throw new Error('useSync deve ser usado dentro de SyncProvider.'); return value; }
+export function SyncProvider({ children }: PropsWithChildren) {
+  const { session } = useAuth();
+  const [online, setOnline] = useState(true);
+  const [connected, setConnected] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [pending, setPending] = useState(0);
+  const [failed, setFailed] = useState(0);
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const applyCounts = useCallback((counts: { pending: number; failed: number }) => {
+    setPending(counts.pending);
+    setFailed(counts.failed);
+  }, []);
+  const syncNow = useCallback(async () => {
+    if (!session || !online || syncing) return;
+    setSyncing(true);
+    try {
+      applyCounts(await drainMutationQueue(session.accessToken));
+      setLastSyncAt(new Date().toISOString());
+    } finally {
+      setSyncing(false);
+    }
+  }, [session, online, syncing, applyCounts]);
+  useEffect(() => {
+    void queueCounts().then(applyCounts);
+    return NetInfo.addEventListener((state) => {
+      const next = Boolean(state.isConnected && state.isInternetReachable !== false);
+      setOnline(next);
+      if (next) void syncNow();
+    });
+  }, [syncNow, applyCounts]);
+  useEffect(() => {
+    if (!session) return;
+    const socket = new ReconnectingSocket(
+      session.accessToken,
+      () => {
+        void syncNow();
+      },
+      setConnected,
+    );
+    socket.start();
+    return () => socket.stop();
+  }, [session, syncNow]);
+  const value = useMemo(
+    () => ({ online, connected, syncing, pending, failed, lastSyncAt, syncNow }),
+    [online, connected, syncing, pending, failed, lastSyncAt, syncNow],
+  );
+  return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;
+}
+export function useSync() {
+  const value = useContext(SyncContext);
+  if (!value) throw new Error('useSync deve ser usado dentro de SyncProvider.');
+  return value;
+}

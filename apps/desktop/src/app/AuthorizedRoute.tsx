@@ -18,4 +18,3 @@ export function AuthorizedRoute({ path, children }: AuthorizedRouteProps) {
 
   return children;
 }
-

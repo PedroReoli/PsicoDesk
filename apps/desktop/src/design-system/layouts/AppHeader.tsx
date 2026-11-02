@@ -22,13 +22,20 @@ export function AppHeader({ userDisplayName, onLogout }: AppHeaderProps) {
         <strong>{current?.label ?? 'Área de trabalho'}</strong>
       </div>
       <div className={styles.actions}>
-        <Badge tone="success"><span className={styles.statusDot} /> Dados locais protegidos</Badge>
+        <Badge tone="success">
+          <span className={styles.statusDot} /> Dados locais protegidos
+        </Badge>
         <span className={styles.userName}>{userDisplayName}</span>
-        <Button variant="ghost" size="sm" aria-label="Pesquisar"><Icon name="search" size={19} /></Button>
-        <Button variant="ghost" size="sm" aria-label="Notificações"><Icon name="bell" size={19} /></Button>
-        <Button variant="secondary" size="sm" onClick={onLogout}>Sair</Button>
+        <Button variant="ghost" size="sm" aria-label="Pesquisar">
+          <Icon name="search" size={19} />
+        </Button>
+        <Button variant="ghost" size="sm" aria-label="Notificações">
+          <Icon name="bell" size={19} />
+        </Button>
+        <Button variant="secondary" size="sm" onClick={onLogout}>
+          Sair
+        </Button>
       </div>
     </header>
   );
 }
-

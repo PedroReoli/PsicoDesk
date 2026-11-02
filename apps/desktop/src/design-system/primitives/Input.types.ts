@@ -6,4 +6,3 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   error?: string | undefined;
   invalid?: boolean;
 }
-

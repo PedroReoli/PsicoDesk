@@ -1,6 +1,12 @@
 import { NavLink } from 'react-router-dom';
 
-import { canViewNavigationItem, primaryNavigation, settingsNavigation, type NavigationItem, type NavigationRole } from '../../shared/constants/navigation';
+import {
+  canViewNavigationItem,
+  primaryNavigation,
+  settingsNavigation,
+  type NavigationItem,
+  type NavigationRole,
+} from '../../shared/constants/navigation';
 import { classNames } from '../../shared/utils/classNames';
 import { Button } from '../primitives/Button';
 import { Icon } from '../primitives/Icon';
@@ -28,28 +34,41 @@ function NavigationLink({ item, collapsed }: { item: NavigationItem; collapsed: 
 }
 
 export function Sidebar({ collapsed, userDisplayName, userRole, onToggle }: SidebarProps) {
-  const visibleNavigation = primaryNavigation.filter((item) => canViewNavigationItem(userRole, item.path));
+  const visibleNavigation = primaryNavigation.filter((item) =>
+    canViewNavigationItem(userRole, item.path),
+  );
   const canViewSettings = canViewNavigationItem(userRole, settingsNavigation.path);
 
   return (
     <aside className={classNames(styles.sidebar, collapsed && styles.collapsed)}>
       <div className={styles.top}>
         <BrandMark compact={collapsed} />
-        <Button variant="ghost" size="sm" onClick={onToggle} aria-label={collapsed ? 'Expandir navegação' : 'Recolher navegação'}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onToggle}
+          aria-label={collapsed ? 'Expandir navegação' : 'Recolher navegação'}
+        >
           <Icon name={collapsed ? 'chevron-right' : 'chevron-left'} size={18} />
         </Button>
       </div>
       <nav aria-label="Navegação principal" className={styles.navigation}>
-        {visibleNavigation.map((item) => <NavigationLink key={item.path} item={item} collapsed={collapsed} />)}
+        {visibleNavigation.map((item) => (
+          <NavigationLink key={item.path} item={item} collapsed={collapsed} />
+        ))}
       </nav>
       <div className={styles.bottom}>
         {canViewSettings && <NavigationLink item={settingsNavigation} collapsed={collapsed} />}
         <div className={styles.profile}>
           <span className={styles.avatar}>DR</span>
-          {!collapsed && <span><strong>{userDisplayName}</strong><small>Profissional</small></span>}
+          {!collapsed && (
+            <span>
+              <strong>{userDisplayName}</strong>
+              <small>Profissional</small>
+            </span>
+          )}
         </div>
       </div>
     </aside>
   );
 }
-

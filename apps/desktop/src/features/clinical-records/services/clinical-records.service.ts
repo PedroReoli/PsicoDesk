@@ -1,2 +1,14 @@
-import {invokeCommand} from '../../../shared/services/tauriClient';import type{AmendmentInput,ClinicalRecord,ClinicalRecordInput}from'../types/clinical-record.types';
-export const clinicalRecordsService={list:(sessionToken:string,patientId:string)=>invokeCommand<ClinicalRecord[]>('list_clinical_records',{sessionToken,patientId}),create:(sessionToken:string,input:ClinicalRecordInput)=>invokeCommand<ClinicalRecord>('create_clinical_record',{sessionToken,input}),amend:(sessionToken:string,recordId:string,input:AmendmentInput)=>invokeCommand<ClinicalRecord>('create_clinical_amendment',{sessionToken,recordId,input})};
+import { invokeCommand } from '../../../shared/services/tauriClient';
+import type {
+  AmendmentInput,
+  ClinicalRecord,
+  ClinicalRecordInput,
+} from '../types/clinical-record.types';
+export const clinicalRecordsService = {
+  list: (sessionToken: string, patientId: string) =>
+    invokeCommand<ClinicalRecord[]>('list_clinical_records', { sessionToken, patientId }),
+  create: (sessionToken: string, input: ClinicalRecordInput) =>
+    invokeCommand<ClinicalRecord>('create_clinical_record', { sessionToken, input }),
+  amend: (sessionToken: string, recordId: string, input: AmendmentInput) =>
+    invokeCommand<ClinicalRecord>('create_clinical_amendment', { sessionToken, recordId, input }),
+};

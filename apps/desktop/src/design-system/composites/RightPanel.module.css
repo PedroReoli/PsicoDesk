@@ -1,12 +1,63 @@
-.panel { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0; height: 100%; background: var(--color-surface); border-left: 1px solid var(--color-border); box-shadow: -14px 0 34px rgb(16 43 41 / 6%); animation: enter 180ms ease-out; }
-.sm { width: min(26.25rem, 100%); }
-.md { width: min(35rem, 100%); }
-.lg { width: min(45rem, 100%); }
-.header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); padding: var(--space-6); border-bottom: 1px solid var(--color-border); }
-.header h2 { margin: 0; font-size: var(--text-xl); letter-spacing: -.02em; }
-.header p { margin: var(--space-2) 0 0; color: var(--color-text-muted); font-size: var(--text-sm); line-height: 1.45; }
-.body { min-height: 0; padding: var(--space-6); overflow-y: auto; }
-.footer { display: flex; justify-content: flex-end; gap: var(--space-2); padding: var(--space-4) var(--space-6); background: var(--color-surface-subtle); border-top: 1px solid var(--color-border); }
-@keyframes enter { from { opacity: 0; transform: translateX(14px); } }
-@media (max-width: 48rem) { .panel { width: 100%; border-left: 0; } }
-
+.panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  height: 100%;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border);
+  box-shadow: -14px 0 34px rgb(16 43 41 / 6%);
+  animation: enter 180ms ease-out;
+}
+.sm {
+  width: min(26.25rem, 100%);
+}
+.md {
+  width: min(35rem, 100%);
+}
+.lg {
+  width: min(45rem, 100%);
+}
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border-bottom: 1px solid var(--color-border);
+}
+.header h2 {
+  margin: 0;
+  font-size: var(--text-xl);
+  letter-spacing: -0.02em;
+}
+.header p {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+.body {
+  min-height: 0;
+  padding: var(--space-6);
+  overflow-y: auto;
+}
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-6);
+  background: var(--color-surface-subtle);
+  border-top: 1px solid var(--color-border);
+}
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}
+@media (max-width: 48rem) {
+  .panel {
+    width: 100%;
+    border-left: 0;
+  }
+}

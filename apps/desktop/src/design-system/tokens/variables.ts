@@ -19,4 +19,3 @@ export const tokens = {
     6: 'var(--space-6)',
   },
 } as const;
-

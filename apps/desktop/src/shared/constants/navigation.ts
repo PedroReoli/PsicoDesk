@@ -10,13 +10,38 @@ export interface NavigationItem {
 export type NavigationRole = 'owner' | 'admin' | 'psychologist' | 'receptionist' | 'finance';
 
 export const primaryNavigation: NavigationItem[] = [
-  { label: 'Dashboard', path: '/dashboard', icon: 'dashboard', description: 'Visão geral da clínica' },
+  {
+    label: 'Dashboard',
+    path: '/dashboard',
+    icon: 'dashboard',
+    description: 'Visão geral da clínica',
+  },
   { label: 'Agenda', path: '/agenda', icon: 'calendar', description: 'Sessões e disponibilidade' },
   { label: 'Pacientes', path: '/pacientes', icon: 'patients', description: 'Cadastros e vínculos' },
-  { label: 'Prontuário', path: '/prontuario', icon: 'clipboard', description: 'Registros clínicos protegidos' },
-  { label: 'Financeiro', path: '/financeiro', icon: 'finance', description: 'Receitas, repasses e caixa' },
-  { label: 'Documentos', path: '/documentos', icon: 'document', description: 'Templates e exportações' },
-  { label: 'Relatórios', path: '/relatorios', icon: 'report', description: 'Indicadores agregados' },
+  {
+    label: 'Prontuário',
+    path: '/prontuario',
+    icon: 'clipboard',
+    description: 'Registros clínicos protegidos',
+  },
+  {
+    label: 'Financeiro',
+    path: '/financeiro',
+    icon: 'finance',
+    description: 'Receitas, repasses e caixa',
+  },
+  {
+    label: 'Documentos',
+    path: '/documentos',
+    icon: 'document',
+    description: 'Templates e exportações',
+  },
+  {
+    label: 'Relatórios',
+    path: '/relatorios',
+    icon: 'report',
+    description: 'Indicadores agregados',
+  },
 ];
 
 export const settingsNavigation: NavigationItem = {
@@ -44,4 +69,3 @@ const routeRoles: Record<string, NavigationRole[]> = {
 export function canViewNavigationItem(role: NavigationRole, path: string) {
   return routeRoles[path]?.includes(role) ?? false;
 }
-

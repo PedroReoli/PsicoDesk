@@ -10,7 +10,10 @@ export class LocalCommandError extends Error {
   }
 }
 
-export async function invokeCommand<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+export async function invokeCommand<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
   try {
     return await invoke<T>(command, args);
   } catch (error) {
@@ -21,4 +24,3 @@ export async function invokeCommand<T>(command: string, args?: Record<string, un
     throw new LocalCommandError('A operação local não pôde ser concluída.');
   }
 }
-

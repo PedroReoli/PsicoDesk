@@ -6,4 +6,6 @@ const grants: Record<Role, readonly Resource[]> = {
   receptionist: ['dashboard', 'schedule', 'patients', 'documents'],
   finance: ['dashboard', 'finance'],
 };
-export function canAccess(role: Role | undefined, resource: Resource) { return role ? grants[role].includes(resource) : false; }
+export function canAccess(role: Role | undefined, resource: Resource) {
+  return role ? grants[role].includes(resource) : false;
+}

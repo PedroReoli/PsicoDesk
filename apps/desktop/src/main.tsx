@@ -18,4 +18,3 @@ ReactDOM.createRoot(rootElement).render(
     </AppProviders>
   </React.StrictMode>,
 );
-

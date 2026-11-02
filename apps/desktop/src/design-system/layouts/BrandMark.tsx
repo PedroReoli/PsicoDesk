@@ -20,4 +20,3 @@ export function BrandMark({ compact }: BrandMarkProps) {
     </div>
   );
 }
-

@@ -1,1 +1,75 @@
-import{PageHeader}from'../../../design-system/composites/PageHeader';import{EmptyState}from'../../../design-system/composites/EmptyState';import{Button}from'../../../design-system/primitives/Button';import{Badge}from'../../../design-system/primitives/Badge';import{MetricCard}from'../components/MetricCard';import{useDashboard}from'../hooks/useDashboard';import styles from'../styles/dashboard.module.css';const money=(value:number)=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value/100);export default function DashboardPage(){const{data,loading,error,reload}=useDashboard();return<section className={styles.page}><PageHeader eyebrow="Visão geral" title="Dashboard" description="Indicadores operacionais agregados, sem exposição desnecessária de conteúdo clínico."/>{loading?<div className={styles.state}>Preparando visão da clínica…</div>:error?<div className={styles.state}><p role="alert">{error}</p><Button onClick={()=>void reload()}>Tentar novamente</Button></div>:data&&<><div className={styles.metrics}><MetricCard label="Sessões no mês" value={data.sessionsThisMonth}/><MetricCard label="Pacientes ativos" value={data.activePatients}/><MetricCard label="Receita no mês" value={money(data.revenueThisMonthMinor)}/><MetricCard label="Ocupação" value={`${String(data.occupancyPercent)}%`}/></div>{data.pendingAmountMinor>0&&<div className={styles.warning} role="status"><strong>Valores pendentes</strong><span>{money(data.pendingAmountMinor)} aguardam recebimento.</span></div>}<section className={styles.agenda}><div className={styles.sectionTitle}><div><span>Hoje</span><h2>Próximos atendimentos</h2></div></div>{data.appointmentsToday.length===0?<EmptyState title="Agenda livre hoje" description="Nenhum atendimento está programado para o restante do dia."/>:<div>{data.appointmentsToday.map(item=><article className={styles.appointment} key={item.id}><time dateTime={item.startsAt}>{new Date(item.startsAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}</time><strong>{item.patientName}</strong><Badge>{item.status}</Badge></article>)}</div>}</section></>}</section>}
+import { PageHeader } from '../../../design-system/composites/PageHeader';
+import { EmptyState } from '../../../design-system/composites/EmptyState';
+import { Button } from '../../../design-system/primitives/Button';
+import { Badge } from '../../../design-system/primitives/Badge';
+import { MetricCard } from '../components/MetricCard';
+import { useDashboard } from '../hooks/useDashboard';
+import styles from '../styles/dashboard.module.css';
+const money = (value: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value / 100);
+export default function DashboardPage() {
+  const { data, loading, error, reload } = useDashboard();
+  return (
+    <section className={styles.page}>
+      <PageHeader
+        eyebrow="Visão geral"
+        title="Dashboard"
+        description="Indicadores operacionais agregados, sem exposição desnecessária de conteúdo clínico."
+      />
+      {loading ? (
+        <div className={styles.state}>Preparando visão da clínica…</div>
+      ) : error ? (
+        <div className={styles.state}>
+          <p role="alert">{error}</p>
+          <Button onClick={() => void reload()}>Tentar novamente</Button>
+        </div>
+      ) : (
+        data && (
+          <>
+            <div className={styles.metrics}>
+              <MetricCard label="Sessões no mês" value={data.sessionsThisMonth} />
+              <MetricCard label="Pacientes ativos" value={data.activePatients} />
+              <MetricCard label="Receita no mês" value={money(data.revenueThisMonthMinor)} />
+              <MetricCard label="Ocupação" value={`${String(data.occupancyPercent)}%`} />
+            </div>
+            {data.pendingAmountMinor > 0 && (
+              <div className={styles.warning} role="status">
+                <strong>Valores pendentes</strong>
+                <span>{money(data.pendingAmountMinor)} aguardam recebimento.</span>
+              </div>
+            )}
+            <section className={styles.agenda}>
+              <div className={styles.sectionTitle}>
+                <div>
+                  <span>Hoje</span>
+                  <h2>Próximos atendimentos</h2>
+                </div>
+              </div>
+              {data.appointmentsToday.length === 0 ? (
+                <EmptyState
+                  title="Agenda livre hoje"
+                  description="Nenhum atendimento está programado para o restante do dia."
+                />
+              ) : (
+                <div>
+                  {data.appointmentsToday.map((item) => (
+                    <article className={styles.appointment} key={item.id}>
+                      <time dateTime={item.startsAt}>
+                        {new Date(item.startsAt).toLocaleTimeString('pt-BR', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </time>
+                      <strong>{item.patientName}</strong>
+                      <Badge>{item.status}</Badge>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          </>
+        )
+      )}
+    </section>
+  );
+}

@@ -8,6 +8,99 @@ import { SyncBadge } from '../../src/components/SyncBadge';
 import { RoleGate } from '../../src/components/RoleGate';
 import { canAccess } from '../../src/security/permissions';
 import { colors, spacing, typography } from '../../src/theme/tokens';
-const money = (minor: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(minor / 100);
-export default function DashboardScreen() { const { session } = useAuth(); const { data, loading, error, reload } = useDashboard(); const role = session?.user.role; const showFinance = canAccess(role, 'finance'); const showPatients = canAccess(role, 'patients'); const showSchedule = canAccess(role, 'schedule'); return <RoleGate resource="dashboard"><Screen title="Visão geral" description="Indicadores sincronizados do PsicoDesk." action={<SyncBadge />}>{loading && !data ? <StateView state="loading" title="Carregando indicadores…" /> : error && !data ? <StateView state="error" title="Não foi possível atualizar" description={error} onRetry={() => { void reload(); }} /> : data ? <><View style={styles.grid}>{showSchedule ? <Card><Text style={styles.label}>Sessões no mês</Text><Text style={styles.value}>{data.sessionsThisMonth}</Text></Card> : null}{showPatients ? <Card><Text style={styles.label}>Pacientes ativos</Text><Text style={styles.value}>{data.activePatients}</Text></Card> : null}{showFinance ? <Card><Text style={styles.label}>Receita</Text><Text style={styles.valueSmall}>{money(data.revenueThisMonthMinor)}</Text></Card> : null}{showSchedule ? <Card><Text style={styles.label}>Ocupação</Text><Text style={styles.value}>{data.occupancyPercent}%</Text></Card> : null}</View>{showSchedule ? <><Text style={styles.heading}>Agenda de hoje</Text>{data.appointmentsToday.length ? data.appointmentsToday.map((item) => <Card key={item.id}><Text style={styles.time}>{new Date(item.startsAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</Text><Text style={styles.name}>{item.patientName}</Text><Text style={styles.label}>{item.status}</Text></Card>) : <StateView state="empty" title="Agenda livre hoje" />}</> : null}</> : null}</Screen></RoleGate>; }
-const styles = StyleSheet.create({ grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md }, label: { color: colors.muted, fontSize: typography.caption }, value: { color: colors.text, fontSize: 28, fontWeight: '800' }, valueSmall: { color: colors.text, fontSize: 20, fontWeight: '800' }, heading: { color: colors.text, fontSize: typography.heading, fontWeight: '800', marginTop: spacing.md }, time: { color: colors.brand, fontWeight: '800' }, name: { color: colors.text, fontSize: typography.body, fontWeight: '700' } });
+const money = (minor: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(minor / 100);
+export default function DashboardScreen() {
+  const { session } = useAuth();
+  const { data, loading, error, reload } = useDashboard();
+  const role = session?.user.role;
+  const showFinance = canAccess(role, 'finance');
+  const showPatients = canAccess(role, 'patients');
+  const showSchedule = canAccess(role, 'schedule');
+  return (
+    <RoleGate resource="dashboard">
+      <Screen
+        title="Visão geral"
+        description="Indicadores sincronizados do PsicoDesk."
+        action={<SyncBadge />}
+      >
+        {loading && !data ? (
+          <StateView state="loading" title="Carregando indicadores…" />
+        ) : error && !data ? (
+          <StateView
+            state="error"
+            title="Não foi possível atualizar"
+            description={error}
+            onRetry={() => {
+              void reload();
+            }}
+          />
+        ) : data ? (
+          <>
+            <View style={styles.grid}>
+              {showSchedule ? (
+                <Card>
+                  <Text style={styles.label}>Sessões no mês</Text>
+                  <Text style={styles.value}>{data.sessionsThisMonth}</Text>
+                </Card>
+              ) : null}
+              {showPatients ? (
+                <Card>
+                  <Text style={styles.label}>Pacientes ativos</Text>
+                  <Text style={styles.value}>{data.activePatients}</Text>
+                </Card>
+              ) : null}
+              {showFinance ? (
+                <Card>
+                  <Text style={styles.label}>Receita</Text>
+                  <Text style={styles.valueSmall}>{money(data.revenueThisMonthMinor)}</Text>
+                </Card>
+              ) : null}
+              {showSchedule ? (
+                <Card>
+                  <Text style={styles.label}>Ocupação</Text>
+                  <Text style={styles.value}>{data.occupancyPercent}%</Text>
+                </Card>
+              ) : null}
+            </View>
+            {showSchedule ? (
+              <>
+                <Text style={styles.heading}>Agenda de hoje</Text>
+                {data.appointmentsToday.length ? (
+                  data.appointmentsToday.map((item) => (
+                    <Card key={item.id}>
+                      <Text style={styles.time}>
+                        {new Date(item.startsAt).toLocaleTimeString('pt-BR', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </Text>
+                      <Text style={styles.name}>{item.patientName}</Text>
+                      <Text style={styles.label}>{item.status}</Text>
+                    </Card>
+                  ))
+                ) : (
+                  <StateView state="empty" title="Agenda livre hoje" />
+                )}
+              </>
+            ) : null}
+          </>
+        ) : null}
+      </Screen>
+    </RoleGate>
+  );
+}
+const styles = StyleSheet.create({
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  label: { color: colors.muted, fontSize: typography.caption },
+  value: { color: colors.text, fontSize: 28, fontWeight: '800' },
+  valueSmall: { color: colors.text, fontSize: 20, fontWeight: '800' },
+  heading: {
+    color: colors.text,
+    fontSize: typography.heading,
+    fontWeight: '800',
+    marginTop: spacing.md,
+  },
+  time: { color: colors.brand, fontWeight: '800' },
+  name: { color: colors.text, fontSize: typography.body, fontWeight: '700' },
+});

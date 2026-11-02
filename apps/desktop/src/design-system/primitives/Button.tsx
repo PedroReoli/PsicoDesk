@@ -16,7 +16,13 @@ export function Button({
   return (
     <button
       type={type}
-      className={classNames(styles.button, styles[variant], styles[size], fullWidth && styles.full, className)}
+      className={classNames(
+        styles.button,
+        styles[variant],
+        styles[size],
+        fullWidth && styles.full,
+        className,
+      )}
       disabled={disabled === true || loading}
       aria-busy={loading || undefined}
       {...props}
@@ -28,4 +34,3 @@ export function Button({
 }
 
 export type { ButtonProps } from './Button.types';
-

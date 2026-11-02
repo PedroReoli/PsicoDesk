@@ -1,2 +1,32 @@
 /* eslint-disable react-hooks/set-state-in-effect -- O efeito dispara uma consulta assíncrona; o estado é atualizado pelo ciclo da operação. */
-import{useCallback,useEffect,useState}from'react';import{useAuthSession}from'../../auth/hooks/useAuthSession';import{financeService}from'../services/finance.service';import type{Charge,ChargeInput,ChargeStatus}from'../types/finance.types';export function useCharges(status?:ChargeStatus){const{session}=useAuthSession();const[charges,setCharges]=useState<Charge[]>([]);const[loading,setLoading]=useState(true);const[error,setError]=useState<string|null>(null);const load=useCallback(async()=>{if(!session)return;setLoading(true);setError(null);try{setCharges(await financeService.list(session.token,status));}catch(cause){setError(cause instanceof Error?cause.message:'Falha ao carregar lançamentos.');}finally{setLoading(false);}},[session,status]);useEffect(()=>{void load()},[load]);async function create(input:ChargeInput){if(!session)throw new Error('Sessão expirada.');const charge=await financeService.create(session.token,input);setCharges(current=>[charge,...current]);}return{charges,loading,error,reload:load,create};}
+import { useCallback, useEffect, useState } from 'react';
+import { useAuthSession } from '../../auth/hooks/useAuthSession';
+import { financeService } from '../services/finance.service';
+import type { Charge, ChargeInput, ChargeStatus } from '../types/finance.types';
+export function useCharges(status?: ChargeStatus) {
+  const { session } = useAuthSession();
+  const [charges, setCharges] = useState<Charge[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(async () => {
+    if (!session) return;
+    setLoading(true);
+    setError(null);
+    try {
+      setCharges(await financeService.list(session.token, status));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao carregar lançamentos.');
+    } finally {
+      setLoading(false);
+    }
+  }, [session, status]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  async function create(input: ChargeInput) {
+    if (!session) throw new Error('Sessão expirada.');
+    const charge = await financeService.create(session.token, input);
+    setCharges((current) => [charge, ...current]);
+  }
+  return { charges, loading, error, reload: load, create };
+}

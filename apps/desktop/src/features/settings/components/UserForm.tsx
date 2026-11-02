@@ -1,1 +1,94 @@
-import{useState,type SyntheticEvent}from'react';import{Button}from'../../../design-system/primitives/Button';import{Input}from'../../../design-system/primitives/Input';import type{CreateUserInput,ManagedUserRole}from'../types/settings.types';import styles from'../styles/settings.module.css';export function UserForm({onSubmit}:{onSubmit:(input:CreateUserInput)=>Promise<void>}){const[displayName,setDisplayName]=useState('');const[username,setUsername]=useState('');const[password,setPassword]=useState('');const[role,setRole]=useState<ManagedUserRole>('psychologist');const[registration,setRegistration]=useState('');const[busy,setBusy]=useState(false);const[error,setError]=useState<string|null>(null);async function submit(event:SyntheticEvent<HTMLFormElement>){event.preventDefault();setBusy(true);setError(null);try{await onSubmit({displayName,username,password,role,professionalRegistration:registration.length?registration:undefined});}catch(cause){setError(cause instanceof Error?cause.message:'Falha ao criar usuário.');}finally{setBusy(false);}}return<form className={styles.form} onSubmit={submit}><Input label="Nome de exibição" value={displayName} onChange={event=> { setDisplayName(event.target.value); }} required/><Input label="Usuário" value={username} onChange={event=> { setUsername(event.target.value); }} required/><Input label="Senha temporária" type="password" minLength={10} value={password} onChange={event=> { setPassword(event.target.value); }} required/><label>Perfil<select value={role} onChange={event=> { setRole(event.target.value as ManagedUserRole); }}><option value="psychologist">Psicólogo</option><option value="receptionist">Recepção</option><option value="finance">Financeiro</option><option value="admin">Administrador</option></select></label>{role==='psychologist'&&<Input label="Registro profissional" value={registration} onChange={event=> { setRegistration(event.target.value); }} required/>}{error&&<p className={styles.error} role="alert">{error}</p>}<Button type="submit" loading={busy} fullWidth>Criar usuário</Button></form>}
+import { useState, type SyntheticEvent } from 'react';
+import { Button } from '../../../design-system/primitives/Button';
+import { Input } from '../../../design-system/primitives/Input';
+import type { CreateUserInput, ManagedUserRole } from '../types/settings.types';
+import styles from '../styles/settings.module.css';
+export function UserForm({ onSubmit }: { onSubmit: (input: CreateUserInput) => Promise<void> }) {
+  const [displayName, setDisplayName] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState<ManagedUserRole>('psychologist');
+  const [registration, setRegistration] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function submit(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await onSubmit({
+        displayName,
+        username,
+        password,
+        role,
+        professionalRegistration: registration.length ? registration : undefined,
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao criar usuário.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form className={styles.form} onSubmit={submit}>
+      <Input
+        label="Nome de exibição"
+        value={displayName}
+        onChange={(event) => {
+          setDisplayName(event.target.value);
+        }}
+        required
+      />
+      <Input
+        label="Usuário"
+        value={username}
+        onChange={(event) => {
+          setUsername(event.target.value);
+        }}
+        required
+      />
+      <Input
+        label="Senha temporária"
+        type="password"
+        minLength={10}
+        value={password}
+        onChange={(event) => {
+          setPassword(event.target.value);
+        }}
+        required
+      />
+      <label>
+        Perfil
+        <select
+          value={role}
+          onChange={(event) => {
+            setRole(event.target.value as ManagedUserRole);
+          }}
+        >
+          <option value="psychologist">Psicólogo</option>
+          <option value="receptionist">Recepção</option>
+          <option value="finance">Financeiro</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </label>
+      {role === 'psychologist' && (
+        <Input
+          label="Registro profissional"
+          value={registration}
+          onChange={(event) => {
+            setRegistration(event.target.value);
+          }}
+          required
+        />
+      )}
+      {error && (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      )}
+      <Button type="submit" loading={busy} fullWidth>
+        Criar usuário
+      </Button>
+    </form>
+  );
+}

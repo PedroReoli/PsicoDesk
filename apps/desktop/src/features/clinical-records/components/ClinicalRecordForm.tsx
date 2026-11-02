@@ -1,2 +1,62 @@
-import{useState,type SyntheticEvent}from'react';import{Button}from'../../../design-system/primitives/Button';import{validateClinicalBody}from'../types/clinical-record.types';import styles from'../styles/clinical-records.module.css';
-export function ClinicalRecordForm({onSubmit,submitLabel='Assinar registro'}:{onSubmit:(body:string)=>Promise<void>;submitLabel?:string}){const[body,setBody]=useState('');const[error,setError]=useState<string|null>(null);const[saving,setSaving]=useState(false);async function submit(event:SyntheticEvent<HTMLFormElement>){event.preventDefault();const validation=validateClinicalBody(body);if(validation){setError(validation);return;}setSaving(true);setError(null);try{await onSubmit(body);setBody('');}catch(cause){setError(cause instanceof Error?cause.message:'Falha ao salvar o registro.');}finally{setSaving(false);}}return<form className={styles.form} onSubmit={submit}><label className={styles.label}>Descrição clínica<textarea value={body} onChange={event=> { setBody(event.target.value); }} rows={12} maxLength={20000} required aria-describedby="record-help"/></label><p id="record-help" className={styles.help}>Depois de assinado, este conteúdo não poderá ser editado. Correções são registradas como adendos.</p>{error&&<p className={styles.error} role="alert">{error}</p>}<Button type="submit" loading={saving} fullWidth>{submitLabel}</Button></form>}
+import { useState, type SyntheticEvent } from 'react';
+import { Button } from '../../../design-system/primitives/Button';
+import { validateClinicalBody } from '../types/clinical-record.types';
+import styles from '../styles/clinical-records.module.css';
+export function ClinicalRecordForm({
+  onSubmit,
+  submitLabel = 'Assinar registro',
+}: {
+  onSubmit: (body: string) => Promise<void>;
+  submitLabel?: string;
+}) {
+  const [body, setBody] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  async function submit(event: SyntheticEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const validation = validateClinicalBody(body);
+    if (validation) {
+      setError(validation);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await onSubmit(body);
+      setBody('');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao salvar o registro.');
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <form className={styles.form} onSubmit={submit}>
+      <label className={styles.label}>
+        Descrição clínica
+        <textarea
+          value={body}
+          onChange={(event) => {
+            setBody(event.target.value);
+          }}
+          rows={12}
+          maxLength={20000}
+          required
+          aria-describedby="record-help"
+        />
+      </label>
+      <p id="record-help" className={styles.help}>
+        Depois de assinado, este conteúdo não poderá ser editado. Correções são registradas como
+        adendos.
+      </p>
+      {error && (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      )}
+      <Button type="submit" loading={saving} fullWidth>
+        {submitLabel}
+      </Button>
+    </form>
+  );
+}

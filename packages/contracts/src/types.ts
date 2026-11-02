@@ -1,8 +1,19 @@
-import type { z } from "zod";
+import type { z } from 'zod';
 import type {
-  appSettingSchema, appointmentSchema, backupInfoSchema, chargeSchema, clinicalRecordSchema, commandErrorSchema,
-  dashboardReportSchema, documentSchema, patientSchema, paymentSchema, roleSchema, sessionSchema, userSummarySchema,
-} from "./schemas.js";
+  appSettingSchema,
+  appointmentSchema,
+  backupInfoSchema,
+  chargeSchema,
+  clinicalRecordSchema,
+  commandErrorSchema,
+  dashboardReportSchema,
+  documentSchema,
+  patientSchema,
+  paymentSchema,
+  roleSchema,
+  sessionSchema,
+  userSummarySchema,
+} from './schemas.js';
 
 export type Role = z.infer<typeof roleSchema>;
 export type UserSummary = z.infer<typeof userSummarySchema>;
@@ -17,4 +28,3 @@ export type DashboardReport = z.infer<typeof dashboardReportSchema>;
 export type AppSetting = z.infer<typeof appSettingSchema>;
 export type BackupInfo = z.infer<typeof backupInfoSchema>;
 export type CommandError = z.infer<typeof commandErrorSchema>;
-

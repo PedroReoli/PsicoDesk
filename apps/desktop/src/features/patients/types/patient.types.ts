@@ -18,6 +18,7 @@ export interface PatientInput {
 export function validatePatient(input: PatientInput) {
   const errors: Partial<Record<keyof PatientInput, string>> = {};
   if (input.fullName.trim().length < 3) errors.fullName = 'Informe o nome completo.';
-  if (input.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email)) errors.email = 'Informe um e-mail válido.';
+  if (input.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email))
+    errors.email = 'Informe um e-mail válido.';
   return errors;
 }

@@ -1,3 +1,10 @@
-.content { min-width: 0; min-height: 0; padding: clamp(var(--space-4), 2.2vw, var(--space-8)); overflow: auto; }
-.content > * { width: min(100%, var(--content-max)); margin-inline: auto; }
-
+.content {
+  min-width: 0;
+  min-height: 0;
+  padding: clamp(var(--space-4), 2.2vw, var(--space-8));
+  overflow: auto;
+}
+.content > * {
+  width: min(100%, var(--content-max));
+  margin-inline: auto;
+}

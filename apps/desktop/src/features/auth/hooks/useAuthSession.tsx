@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type PropsWithChildren,
+} from 'react';
 import { authService } from '../services/auth.service';
 import type { BootstrapAdminInput, LoginInput, Session } from '../types/auth.types';
 
@@ -35,7 +43,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
     }
   }, []);
 
-  const login = useCallback((input: LoginInput) => execute(() => authService.login(input)), [execute]);
+  const login = useCallback(
+    (input: LoginInput) => execute(() => authService.login(input)),
+    [execute],
+  );
   const bootstrap = useCallback(
     (input: BootstrapAdminInput) => execute(() => authService.bootstrapAdmin(input)),
     [execute],
@@ -59,10 +70,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
       timer = window.setTimeout(() => void logout(), 15 * 60 * 1000);
     };
     const events = ['pointerdown', 'keydown', 'focus'] as const;
-    events.forEach((event) => { window.addEventListener(event, reset, { passive: true }); });
+    events.forEach((event) => {
+      window.addEventListener(event, reset, { passive: true });
+    });
     return () => {
       window.clearTimeout(timer);
-      events.forEach((event) => { window.removeEventListener(event, reset); });
+      events.forEach((event) => {
+        window.removeEventListener(event, reset);
+      });
     };
   }, [session, logout]);
 

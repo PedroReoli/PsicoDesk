@@ -14,12 +14,18 @@ export function usePatients(query: string) {
     if (!session) return;
     setLoading(true);
     setError(null);
-    try { setPatients(await patientsService.list(session.token, query)); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : 'Falha ao carregar pacientes.'); }
-    finally { setLoading(false); }
+    try {
+      setPatients(await patientsService.list(session.token, query));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Falha ao carregar pacientes.');
+    } finally {
+      setLoading(false);
+    }
   }, [session, query]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   async function create(input: PatientInput) {
     if (!session) throw new Error('Sessão expirada.');
