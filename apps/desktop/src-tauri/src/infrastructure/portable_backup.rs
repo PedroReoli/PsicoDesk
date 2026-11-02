@@ -17,10 +17,10 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
-use crate::{error::AppError, infrastructure::database::Database};
+use crate::{error::AppError, infrastructure::database::Database, security::document_crypto};
 
-const MAGIC: &[u8; 8] = b"PSDBAK02";
-const VERSION: u16 = 2;
+const MAGIC: &[u8; 8] = b"PSDBAK03";
+const VERSION: u16 = 3;
 const SALT_LEN: usize = 16;
 const NONCE_PREFIX_LEN: usize = 8;
 const TAG_LEN: usize = 16;
@@ -31,7 +31,8 @@ const KDF_LANES: u32 = 1;
 const HEADER_LEN: usize = 8 + 2 + 4 + 4 + 4 + 4 + 8 + SALT_LEN + NONCE_PREFIX_LEN;
 const MAX_CONTAINER_BYTES: u64 = 64 * 1024 * 1024 * 1024;
 const MAX_DOCUMENT_BYTES: u64 = 256 * 1024 * 1024;
-type DerivedKeys = (Zeroizing<Vec<u8>>, Zeroizing<Vec<u8>>);
+type DerivedKeys = (Zeroizing<Vec<u8>>, Zeroizing<Vec<u8>>, Zeroizing<Vec<u8>>);
+type DecryptedKeys = (Zeroizing<Vec<u8>>, Zeroizing<Vec<u8>>);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -85,6 +86,7 @@ impl Drop for TempDirectory {
 
 pub fn export(
     database: &Database,
+    source_local_key: &[u8],
     documents_dir: &Path,
     backup_dir: &Path,
     passphrase: &str,
@@ -98,8 +100,15 @@ pub fn export(
 
     let mut salt = [0u8; SALT_LEN];
     OsRng.fill_bytes(&mut salt);
-    let (database_key, envelope_key) = derive_keys(passphrase, &salt)?;
-    create_portable_database(database, documents_dir, &stage.0, database_key.as_slice())?;
+    let (database_key, envelope_key, document_key) = derive_keys(passphrase, &salt)?;
+    create_portable_database(
+        database,
+        source_local_key,
+        document_key.as_slice(),
+        documents_dir,
+        &stage.0,
+        database_key.as_slice(),
+    )?;
     encrypt_file(&stage.0, &output.0, envelope_key.as_slice(), salt)?;
     if final_path.exists() {
         return Err(AppError::Conflict(
@@ -150,6 +159,7 @@ pub fn list(backup_dir: &Path) -> Result<Vec<PortableBackupInfo>, AppError> {
 
 pub fn restore(
     database: &mut Database,
+    destination_local_key: &[u8],
     documents_dir: &Path,
     backup_dir: &Path,
     backup_id: &str,
@@ -165,10 +175,15 @@ pub fn restore(
     let source_path = backup_dir.join(backup_id);
     ensure_regular_child(&backup_dir, &source_path)?;
     let stage = TempFile(unique_temp_path(&backup_dir, "restore"));
-    let database_key = decrypt_file(&source_path, &stage.0, passphrase)?;
+    let (database_key, document_key) = decrypt_file(&source_path, &stage.0, passphrase)?;
     let source = open_encrypted(&stage.0, database_key.as_slice())?;
     verify_integrity(&source)?;
-    let staged_documents = extract_documents(&source, documents_dir)?;
+    let staged_documents = extract_documents(
+        &source,
+        document_key.as_slice(),
+        destination_local_key,
+        documents_dir,
+    )?;
     source.execute_batch("DROP TABLE _portable_files; DROP TABLE _portable_manifest;")?;
     verify_integrity(&source)?;
     install_database_and_documents(database, &source, documents_dir, staged_documents)
@@ -176,6 +191,8 @@ pub fn restore(
 
 fn create_portable_database(
     database: &Database,
+    source_local_key: &[u8],
+    portable_document_key: &[u8],
     documents_dir: &Path,
     path: &Path,
     key: &[u8],
@@ -184,11 +201,21 @@ fn create_portable_database(
     let backup = Backup::new(&database.connection, &mut destination)?;
     backup.run_to_completion(16, Duration::from_millis(10), None)?;
     drop(backup);
-    add_documents(&destination, documents_dir)?;
+    add_documents(
+        &destination,
+        source_local_key,
+        portable_document_key,
+        documents_dir,
+    )?;
     verify_integrity(&destination)
 }
 
-fn add_documents(connection: &Connection, documents_dir: &Path) -> Result<(), AppError> {
+fn add_documents(
+    connection: &Connection,
+    source_local_key: &[u8],
+    portable_document_key: &[u8],
+    documents_dir: &Path,
+) -> Result<(), AppError> {
     connection.execute_batch(
         "DROP TABLE IF EXISTS _portable_files;
          DROP TABLE IF EXISTS _portable_manifest;
@@ -230,14 +257,16 @@ fn add_documents(connection: &Connection, documents_dir: &Path) -> Result<(), Ap
                 "Um documento mudou durante a criação do backup.".into(),
             ));
         }
-        let checksum = hex::encode(Sha256::digest(&content));
+        let plaintext = document_crypto::decrypt(&content, source_local_key)?;
+        let portable_content = document_crypto::encrypt(&plaintext, portable_document_key)?;
+        let checksum = hex::encode(Sha256::digest(&portable_content));
         connection.execute(
             "INSERT INTO _portable_manifest(path,size_bytes,sha256) VALUES (?1,?2,?3)",
-            params![file_name, metadata.len() as i64, checksum],
+            params![file_name, portable_content.len() as i64, checksum],
         )?;
         connection.execute(
             "INSERT INTO _portable_files(path,content) VALUES (?1,?2)",
-            params![file_name, content],
+            params![file_name, portable_content],
         )?;
     }
     Ok(())
@@ -245,6 +274,8 @@ fn add_documents(connection: &Connection, documents_dir: &Path) -> Result<(), Ap
 
 fn extract_documents(
     connection: &Connection,
+    portable_document_key: &[u8],
+    destination_local_key: &[u8],
     documents_dir: &Path,
 ) -> Result<TempDirectory, AppError> {
     let parent = documents_dir
@@ -290,6 +321,8 @@ fn extract_documents(
         {
             return Err(invalid_backup());
         }
+        let plaintext = document_crypto::decrypt(&content, portable_document_key)?;
+        let local_content = document_crypto::encrypt(&plaintext, destination_local_key)?;
         let destination = stage.path.join(&file_name);
         if destination.parent() != Some(stage.path.as_path()) {
             return Err(invalid_backup());
@@ -298,7 +331,7 @@ fn extract_documents(
             .write(true)
             .create_new(true)
             .open(destination)?;
-        file.write_all(&content)?;
+        file.write_all(&local_content)?;
         file.sync_all()?;
         extracted += 1;
     }
@@ -427,7 +460,7 @@ fn decrypt_file(
     source: &Path,
     destination: &Path,
     passphrase: &str,
-) -> Result<Zeroizing<Vec<u8>>, AppError> {
+) -> Result<DecryptedKeys, AppError> {
     let metadata = fs::symlink_metadata(source)?;
     if metadata.file_type().is_symlink()
         || !metadata.is_file()
@@ -443,7 +476,7 @@ fn decrypt_file(
         .read_exact(&mut header_bytes)
         .map_err(|_| invalid_backup())?;
     let header = decode_header(&header_bytes)?;
-    let (database_key, envelope_key) = derive_keys(passphrase, &header.salt)?;
+    let (database_key, envelope_key, document_key) = derive_keys(passphrase, &header.salt)?;
     let cipher =
         Aes256Gcm::new_from_slice(envelope_key.as_slice()).map_err(|_| invalid_backup())?;
     let file = OpenOptions::new()
@@ -490,7 +523,7 @@ fn decrypt_file(
     }
     output.flush()?;
     output.get_ref().sync_all()?;
-    Ok(database_key)
+    Ok((database_key, document_key))
 }
 
 fn encode_header(header: &Header) -> [u8; HEADER_LEN] {
@@ -556,7 +589,14 @@ fn derive_keys(passphrase: &str, salt: &[u8]) -> Result<DerivedKeys, AppError> {
             .finalize()
             .to_vec(),
     );
-    Ok((database_key, envelope_key))
+    let document_key = Zeroizing::new(
+        Sha256::new()
+            .chain_update(b"PsicoDesk portable backup document key v1")
+            .chain_update(master.as_slice())
+            .finalize()
+            .to_vec(),
+    );
+    Ok((database_key, envelope_key, document_key))
 }
 
 fn open_encrypted_create_new(path: &Path, key: &[u8]) -> Result<Connection, AppError> {
@@ -727,13 +767,17 @@ mod tests {
         let source_documents = root.path().join("source-root").join("documents");
         fs::create_dir_all(&source_documents).expect("source documents");
         let document_name = "00000000-0000-4000-8000-000000000001.psd";
+        let source_key = [7u8; 32];
+        let destination_key = [9u8; 32];
+        let plaintext = b"conteudo clinico confidencial";
         fs::write(
             source_documents.join(document_name),
-            b"encrypted-document-source",
+            document_crypto::encrypt(plaintext, &source_key).expect("encrypt source document"),
         )
         .expect("document");
         let info = export(
             &source,
+            &source_key,
             &source_documents,
             &root.path().join("managed"),
             "frase-secreta-bem-forte-123",
@@ -747,6 +791,7 @@ mod tests {
         fs::write(target_documents.join(stale_name), b"stale").expect("stale");
         restore(
             &mut target,
+            &destination_key,
             &target_documents,
             &root.path().join("managed"),
             &info.id,
@@ -762,10 +807,15 @@ mod tests {
             )
             .expect("value");
         assert_eq!(restored.len(), large.len());
+        let restored_document =
+            fs::read(target_documents.join(document_name)).expect("restored document");
         assert_eq!(
-            fs::read(target_documents.join(document_name)).expect("restored document"),
-            b"encrypted-document-source"
+            document_crypto::decrypt(&restored_document, &destination_key)
+                .expect("decrypt with destination key")
+                .as_slice(),
+            plaintext
         );
+        assert!(document_crypto::decrypt(&restored_document, &source_key).is_err());
         assert!(
             !target_documents.join(stale_name).exists(),
             "restore replaces the document set, removing stale destination files"
@@ -803,7 +853,7 @@ mod tests {
              INSERT INTO _portable_manifest(path,size_bytes,sha256) VALUES ('00000000-0000-4000-8000-000000000004.psd',4,'0000000000000000000000000000000000000000000000000000000000000000');",
         ).expect("corrupt manifest");
 
-        assert!(extract_documents(&archive, &target_documents).is_err());
+        assert!(extract_documents(&archive, &[4u8; 32], &[5u8; 32], &target_documents).is_err());
         let count: i64 = target
             .connection
             .query_row(
@@ -826,6 +876,7 @@ mod tests {
         source.connection.execute("INSERT INTO app_settings(key,value_json,updated_at) VALUES ('source_marker','\"source\"','2026-01-01T00:00:00Z')", []).expect("fixture");
         let info = export(
             &source,
+            &[1u8; 32],
             &root.path().join("source-documents"),
             &root.path().join("managed"),
             "frase-secreta-bem-forte-123",
@@ -840,6 +891,7 @@ mod tests {
         fs::write(target_documents.join(target_file), b"keep-me").expect("target document");
         assert!(restore(
             &mut target,
+            &[2u8; 32],
             &target_documents,
             &root.path().join("managed"),
             &info.id,
@@ -876,6 +928,7 @@ mod tests {
         file.sync_all().expect("sync");
         assert!(restore(
             &mut target,
+            &[2u8; 32],
             &target_documents,
             &root.path().join("managed"),
             &info.id,
@@ -898,6 +951,7 @@ mod tests {
 
         assert!(restore(
             &mut target,
+            &[2u8; 32],
             &target_documents,
             &root.path().join("managed"),
             "portable-20261102T120000Z-00112233.psdbak",

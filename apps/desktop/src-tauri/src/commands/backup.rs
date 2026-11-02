@@ -125,6 +125,7 @@ pub fn export_portable_backup(
         .map_err(|_| CommandError::from(AppError::Internal("database lock poisoned".into())))?;
     let info = portable_backup::export(
         &db,
+        state.database_key.as_slice(),
         &state.data_dir.join("documents"),
         &directory,
         &input.passphrase,
@@ -180,6 +181,7 @@ pub fn restore_portable_backup(
         .map_err(CommandError::from)?;
     let result = portable_backup::restore(
         &mut db,
+        state.database_key.as_slice(),
         &state.data_dir.join("documents"),
         &directory,
         &input.backup_id,

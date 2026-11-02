@@ -4,8 +4,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
-use rand::{rngs::OsRng, RngCore};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use tauri::{Manager, State};
@@ -20,6 +18,7 @@ use crate::{
     commands::authenticate,
     domain::models::{Document, GenerateDocumentInput, RegisterDocumentInput, Role},
     error::{AppError, CommandError, CommandResult},
+    security::document_crypto,
     state::AppState,
 };
 
@@ -87,25 +86,8 @@ pub fn generate_document(
         .map_err(AppError::from)
         .map_err(CommandError::from)?;
     let destination = document_dir.join(&file_name);
-    let mut key_hasher = Sha256::new();
-    key_hasher.update(b"PsicoDesk documents v1\0");
-    key_hasher.update(state.database_key.as_slice());
-    let document_key = key_hasher.finalize();
-    let cipher = Aes256Gcm::new_from_slice(&document_key).map_err(|_| {
-        CommandError::from(AppError::Security("Chave de documento inválida.".into()))
-    })?;
-    let mut nonce_bytes = [0u8; 12];
-    OsRng.fill_bytes(&mut nonce_bytes);
-    let ciphertext = cipher
-        .encrypt(Nonce::from_slice(&nonce_bytes), content.as_bytes())
-        .map_err(|_| {
-            CommandError::from(AppError::Security(
-                "Não foi possível cifrar o documento.".into(),
-            ))
-        })?;
-    let mut payload = b"PSD1".to_vec();
-    payload.extend_from_slice(&nonce_bytes);
-    payload.extend_from_slice(&ciphertext);
+    let payload = document_crypto::encrypt(content.as_bytes(), state.database_key.as_slice())
+        .map_err(CommandError::from)?;
     let temporary = destination.with_extension("tmp");
     fs::write(&temporary, payload)
         .map_err(AppError::from)
@@ -183,22 +165,8 @@ pub fn export_document(
     let encrypted = fs::read(encrypted_path)
         .map_err(AppError::from)
         .map_err(CommandError::from)?;
-    if encrypted.len() < 16 || &encrypted[..4] != b"PSD1" {
-        return Err(AppError::Security("Documento protegido inválido.".into()).into());
-    }
-    let mut key_hasher = Sha256::new();
-    key_hasher.update(b"PsicoDesk documents v1\0");
-    key_hasher.update(state.database_key.as_slice());
-    let cipher = Aes256Gcm::new_from_slice(&key_hasher.finalize()).map_err(|_| {
-        CommandError::from(AppError::Security("Chave de documento inválida.".into()))
-    })?;
-    let plaintext = cipher
-        .decrypt(Nonce::from_slice(&encrypted[4..16]), &encrypted[16..])
-        .map_err(|_| {
-            CommandError::from(AppError::Security(
-                "Documento não pôde ser autenticado.".into(),
-            ))
-        })?;
+    let plaintext = document_crypto::decrypt(&encrypted, state.database_key.as_slice())
+        .map_err(CommandError::from)?;
     let exports = app
         .path()
         .document_dir()
