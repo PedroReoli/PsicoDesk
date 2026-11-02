@@ -50,27 +50,39 @@ export function UserForm({ onSubmit }: { onSubmit: (input: CreateUserInput) => P
       <Input
         label="Senha temporária"
         type="password"
-        minLength={10}
+        minLength={12}
         value={password}
         onChange={(event) => {
           setPassword(event.target.value);
         }}
         required
       />
-      <label>
-        Perfil
-        <select
-          value={role}
-          onChange={(event) => {
-            setRole(event.target.value as ManagedUserRole);
-          }}
-        >
-          <option value="psychologist">Psicólogo</option>
-          <option value="receptionist">Recepção</option>
-          <option value="finance">Financeiro</option>
-          <option value="admin">Administrador</option>
-        </select>
-      </label>
+      <fieldset className={styles.choiceGroup}>
+        <legend>Perfil</legend>
+        <div role="radiogroup" aria-label="Perfil do usuário">
+          {(
+            [
+              ['psychologist', 'Psicólogo'],
+              ['receptionist', 'Recepção'],
+              ['finance', 'Financeiro'],
+              ['admin', 'Administrador'],
+            ] as const
+          ).map(([value, label]) => (
+            <Button
+              key={value}
+              type="button"
+              variant={role === value ? 'primary' : 'ghost'}
+              role="radio"
+              aria-checked={role === value}
+              onClick={() => {
+                setRole(value);
+              }}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      </fieldset>
       {role === 'psychologist' && (
         <Input
           label="Registro profissional"

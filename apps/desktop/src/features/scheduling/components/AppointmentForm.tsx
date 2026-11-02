@@ -1,14 +1,18 @@
 import { useState, type SyntheticEvent } from 'react';
 import { Button } from '../../../design-system/primitives/Button';
 import { Input } from '../../../design-system/primitives/Input';
+import { OptionPicker } from '../../../shared/components/OptionPicker';
+import { useDirectoryOptions } from '../../../shared/hooks/useDirectoryOptions';
 import type { AppointmentInput } from '../types/appointment.types';
-import { hasValidPeriod } from '../types/appointment.types';
+import { hasValidPeriod, normalizeAppointmentInput } from '../types/appointment.types';
 import styles from '../styles/scheduling.module.css';
 export function AppointmentForm({
   onSubmit,
 }: {
   onSubmit: (input: AppointmentInput) => Promise<void>;
 }) {
+  const patients = useDirectoryOptions('patients');
+  const professionals = useDirectoryOptions('professionals');
   const [input, setInput] = useState<AppointmentInput>({
     patientId: '',
     professionalId: '',
@@ -27,7 +31,7 @@ export function AppointmentForm({
     setSaving(true);
     setError(null);
     try {
-      await onSubmit(input);
+      await onSubmit(normalizeAppointmentInput(input));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível agendar.');
     } finally {
@@ -36,20 +40,26 @@ export function AppointmentForm({
   }
   return (
     <form className={styles.form} onSubmit={submit}>
-      <Input
-        label="ID do paciente"
+      <OptionPicker
+        label="Paciente"
+        options={patients.options}
         value={input.patientId}
-        onChange={(event) => {
-          setInput({ ...input, patientId: event.target.value });
+        onChange={(patientId) => {
+          setInput({ ...input, patientId });
         }}
+        loading={patients.loading}
+        error={patients.error}
         required
       />
-      <Input
-        label="ID do profissional"
+      <OptionPicker
+        label="Profissional"
+        options={professionals.options}
         value={input.professionalId}
-        onChange={(event) => {
-          setInput({ ...input, professionalId: event.target.value });
+        onChange={(professionalId) => {
+          setInput({ ...input, professionalId });
         }}
+        loading={professionals.loading}
+        error={professionals.error}
         required
       />
       <Input

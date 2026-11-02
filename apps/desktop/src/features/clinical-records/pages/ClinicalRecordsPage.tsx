@@ -3,12 +3,14 @@ import { PageHeader } from '../../../design-system/composites/PageHeader';
 import { RightPanel } from '../../../design-system/composites/RightPanel';
 import { EmptyState } from '../../../design-system/composites/EmptyState';
 import { Button } from '../../../design-system/primitives/Button';
-import { Input } from '../../../design-system/primitives/Input';
 import { Badge } from '../../../design-system/primitives/Badge';
+import { OptionPicker } from '../../../shared/components/OptionPicker';
+import { useDirectoryOptions } from '../../../shared/hooks/useDirectoryOptions';
 import { ClinicalRecordForm } from '../components/ClinicalRecordForm';
 import { useClinicalRecords } from '../hooks/useClinicalRecords';
 import styles from '../styles/clinical-records.module.css';
 export default function ClinicalRecordsPage() {
+  const patients = useDirectoryOptions('patients');
   const [patientId, setPatientId] = useState('');
   const [panel, setPanel] = useState<'new' | 'amend' | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -31,13 +33,16 @@ export default function ClinicalRecordsPage() {
         }
       />
       <div className={styles.patientSearch}>
-        <Input
-          label="Identificador do paciente"
-          placeholder="Selecione ou informe o ID"
+        <OptionPicker
+          label="Paciente"
+          options={patients.options}
           value={patientId}
-          onChange={(event) => {
-            setPatientId(event.target.value);
+          onChange={(value) => {
+            setPatientId(value);
           }}
+          loading={patients.loading}
+          error={patients.error}
+          required
         />
       </div>
       {!patientId ? (

@@ -1,9 +1,12 @@
 import { useState, type SyntheticEvent } from 'react';
 import { Button } from '../../../design-system/primitives/Button';
 import { Input } from '../../../design-system/primitives/Input';
+import { OptionPicker } from '../../../shared/components/OptionPicker';
+import { useDirectoryOptions } from '../../../shared/hooks/useDirectoryOptions';
 import { parseCurrencyToMinor, type ChargeInput } from '../types/finance.types';
 import styles from '../styles/finance.module.css';
 export function ChargeForm({ onSubmit }: { onSubmit: (input: ChargeInput) => Promise<void> }) {
+  const patients = useDirectoryOptions('patients');
   const [patientId, setPatientId] = useState('');
   const [description, setDescription] = useState('Sessão individual');
   const [amount, setAmount] = useState('');
@@ -29,12 +32,15 @@ export function ChargeForm({ onSubmit }: { onSubmit: (input: ChargeInput) => Pro
   }
   return (
     <form className={styles.form} onSubmit={submit}>
-      <Input
-        label="ID do paciente"
+      <OptionPicker
+        label="Paciente"
+        options={patients.options}
         value={patientId}
-        onChange={(event) => {
-          setPatientId(event.target.value);
+        onChange={(value) => {
+          setPatientId(value);
         }}
+        loading={patients.loading}
+        error={patients.error}
         required
       />
       <Input

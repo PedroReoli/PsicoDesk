@@ -44,6 +44,26 @@
   display: grid;
   gap: 18px;
 }
+
+.choiceGroup {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choiceGroup div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.userActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
 .danger {
   padding: 16px;
   border: 1px solid var(--color-danger);

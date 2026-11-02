@@ -12,7 +12,7 @@ const statusLabel = {
   confirmed: 'Confirmado',
   completed: 'Concluído',
   cancelled: 'Cancelado',
-  missed: 'Faltou',
+  no_show: 'Faltou',
 } as const;
 export default function SchedulingPage() {
   const [reference, setReference] = useState(() => new Date());

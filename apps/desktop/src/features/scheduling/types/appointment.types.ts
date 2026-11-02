@@ -1,4 +1,4 @@
-export type AppointmentStatus = 'scheduled' | 'confirmed' | 'completed' | 'cancelled' | 'missed';
+export type AppointmentStatus = 'scheduled' | 'confirmed' | 'completed' | 'cancelled' | 'no_show';
 export interface Appointment {
   id: string;
   patientId: string;
@@ -19,4 +19,12 @@ export interface AppointmentInput {
 }
 export function hasValidPeriod(input: AppointmentInput) {
   return new Date(input.startsAt).getTime() < new Date(input.endsAt).getTime();
+}
+
+export function normalizeAppointmentInput(input: AppointmentInput): AppointmentInput {
+  return {
+    ...input,
+    startsAt: new Date(input.startsAt).toISOString(),
+    endsAt: new Date(input.endsAt).toISOString(),
+  };
 }

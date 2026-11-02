@@ -1,6 +1,8 @@
 import { useState, type SyntheticEvent } from 'react';
 import { Button } from '../../../design-system/primitives/Button';
 import { Input } from '../../../design-system/primitives/Input';
+import { OptionPicker } from '../../../shared/components/OptionPicker';
+import { useDirectoryOptions } from '../../../shared/hooks/useDirectoryOptions';
 import type { DocumentType, GenerateDocumentInput } from '../types/document.types';
 import styles from '../styles/documents.module.css';
 export function DocumentForm({
@@ -8,6 +10,7 @@ export function DocumentForm({
 }: {
   onSubmit: (input: GenerateDocumentInput) => Promise<void>;
 }) {
+  const patients = useDirectoryOptions('patients');
   const [patientId, setPatientId] = useState('');
   const [title, setTitle] = useState('');
   const [type, setType] = useState<DocumentType>('declaration');
@@ -38,12 +41,16 @@ export function DocumentForm({
   }
   return (
     <form className={styles.form} onSubmit={submit}>
-      <Input
-        label="ID do paciente (opcional)"
+      <OptionPicker
+        label="Paciente (opcional)"
+        options={patients.options}
         value={patientId}
-        onChange={(event) => {
-          setPatientId(event.target.value);
+        onChange={(value) => {
+          setPatientId(value);
         }}
+        loading={patients.loading}
+        error={patients.error}
+        emptyLabel="Documento geral, sem paciente"
       />
       <Input
         label="Título"
@@ -53,21 +60,33 @@ export function DocumentForm({
         }}
         required
       />
-      <label>
-        Tipo
-        <select
-          value={type}
-          onChange={(event) => {
-            setType(event.target.value as DocumentType);
-          }}
-        >
-          <option value="declaration">Declaração</option>
-          <option value="receipt">Recibo</option>
-          <option value="report">Relatório</option>
-          <option value="consent">Consentimento</option>
-          <option value="other">Outro</option>
-        </select>
-      </label>
+      <fieldset className={styles.choiceGroup}>
+        <legend>Tipo</legend>
+        <div role="radiogroup" aria-label="Tipo de documento">
+          {(
+            [
+              ['declaration', 'Declaração'],
+              ['receipt', 'Recibo'],
+              ['report', 'Relatório'],
+              ['consent', 'Consentimento'],
+              ['other', 'Outro'],
+            ] as const
+          ).map(([value, label]) => (
+            <Button
+              key={value}
+              type="button"
+              variant={type === value ? 'primary' : 'ghost'}
+              role="radio"
+              aria-checked={type === value}
+              onClick={() => {
+                setType(value);
+              }}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+      </fieldset>
       <label>
         Conteúdo
         <textarea
