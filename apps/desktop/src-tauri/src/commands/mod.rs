@@ -7,6 +7,7 @@ pub mod patients;
 pub mod reports;
 pub mod scheduling;
 pub mod settings;
+pub mod sync;
 pub mod users;
 
 use crate::{application::authorization::Principal, error::AppError, state::AppState};

@@ -5,6 +5,7 @@ mod error;
 mod infrastructure;
 mod security;
 mod state;
+mod sync;
 
 use tauri::Manager;
 use tracing_subscriber::EnvFilter;
@@ -21,7 +22,10 @@ pub fn run() {
             let app_data_dir = app.path().app_data_dir()?;
             let state = state::AppState::initialize(app_data_dir)
                 .map_err(|error| Box::<dyn std::error::Error>::from(error.to_string()))?;
+            sync::initialize(&state)
+                .map_err(|error| Box::<dyn std::error::Error>::from(error.to_string()))?;
             app.manage(state);
+            app.manage(sync::SyncRuntime::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -52,6 +56,12 @@ pub fn run() {
             commands::backup::create_backup,
             commands::backup::list_backups,
             commands::backup::restore_backup,
+            commands::sync::get_sync_config,
+            commands::sync::update_sync_config,
+            commands::sync::get_sync_status,
+            commands::sync::start_sync,
+            commands::sync::stop_sync,
+            commands::sync::sync_now,
         ])
         .run(tauri::generate_context!())
         .expect("falha ao iniciar o PsicoDesk");
