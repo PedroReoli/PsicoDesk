@@ -4,12 +4,18 @@
   "private": true,
   "type": "module",
   "main": "expo-router/entry",
+  "expo": {
+    "install": {
+      "exclude": ["react-native-safe-area-context"]
+    }
+  },
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-transform-types --test src/api/backoff.test.ts src/api/client.test.ts src/api/config.test.ts src/auth/deviceCleanup.test.ts src/auth/provisioningValidation.test.ts src/database/projectionMaterializer.test.ts src/security/base64.test.ts src/security/batchSigning.test.ts src/sync/BatchEngine.test.ts",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "node --experimental-transform-types --test src/api/backoff.test.ts src/api/client.test.ts src/api/config.test.ts src/auth/deviceCleanup.test.ts src/auth/provisioningValidation.test.ts src/database/projectionMaterializer.test.ts src/security/base64.test.ts src/security/batchSigning.test.ts src/security/permissions.test.ts src/sync/BatchEngine.test.ts",
     "test:integration": "npm run build --workspace @psicodesk/api && node --experimental-transform-types --test src/integration/api.e2e.test.ts"
   },
   "dependencies": {

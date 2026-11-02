@@ -1,6 +1,7 @@
 import { ApiError, apiRequest, type ApiDependencies } from '../api/client.ts';
 import { backoffDelay, isRetryableStatus } from '../api/backoff.ts';
 import type { BatchStore } from '../database/batchRepository.ts';
+import { parseTransferItems } from '../database/projectionMaterializer.ts';
 import type { BatchEnvelope, BatchListResult, BatchMetadata, DeviceCredentials, SyncCounts } from '../types/sync.ts';
 import { assembleEnvelope, parseBatchList } from './batchProtocol.ts';
 export interface BatchTransport { send(credentials: DeviceCredentials, token: string, envelope: BatchEnvelope): Promise<void>; list(credentials: DeviceCredentials, token: string, cursor: string): Promise<BatchListResult>; payload(credentials: DeviceCredentials, token: string, metadata: BatchMetadata): Promise<BatchEnvelope>; acknowledge(credentials: DeviceCredentials, token: string, batchId: string, status: 'applied' | 'rejected', importedAt: string): Promise<void>; }
@@ -18,7 +19,7 @@ export class BatchEngine {
   async run(credentials: DeviceCredentials, token: string): Promise<SyncCounts> {
     for (const envelope of await this.store.due()) { try { await this.transport.send(credentials, token, envelope); await this.store.sent(envelope.batchId); } catch (cause) { const api = cause instanceof ApiError ? cause : null; const retryable = !api || api.code === 'NETWORK_ERROR' || isRetryableStatus(api.status); await this.store.failed(envelope.batchId, api?.code ?? 'BATCH_SEND_ERROR', new Date(Date.now() + (retryable ? backoffDelay(1) : 0)).toISOString(), !retryable); if (retryable) throw cause; } }
     let cursor = await this.store.cursor();
-    for (let page = 0; page < 10; page += 1) { const listing = await this.transport.list(credentials, token, cursor); for (const metadata of listing.items) { const envelope = await this.transport.payload(credentials, token, metadata); try { const plaintext = await this.cryptography.open(credentials, envelope); const receipt = await this.store.saveImported(envelope, plaintext); await this.transport.acknowledge(credentials, token, envelope.batchId, 'applied', receipt.importedAt); } catch (cause) { if (cause instanceof ApiError) throw cause; await this.transport.acknowledge(credentials, token, envelope.batchId, 'rejected', metadata.receivedAt); } } cursor = listing.nextCursor; await this.store.setCursor(cursor); if (!listing.hasMore) break; }
+    for (let page = 0; page < 10; page += 1) { const listing = await this.transport.list(credentials, token, cursor); for (const metadata of listing.items) { const envelope = await this.transport.payload(credentials, token, metadata); let plaintext: unknown; try { plaintext = await this.cryptography.open(credentials, envelope); parseTransferItems(plaintext); } catch (cause) { if (cause instanceof ApiError) throw cause; await this.transport.acknowledge(credentials, token, envelope.batchId, 'rejected', metadata.receivedAt); continue; } const receipt = await this.store.saveImported(envelope, plaintext); await this.transport.acknowledge(credentials, token, envelope.batchId, 'applied', receipt.importedAt); } cursor = listing.nextCursor; await this.store.setCursor(cursor); if (!listing.hasMore) break; }
     return this.store.counts();
   }
 }

@@ -17,7 +17,7 @@ describe('normalizeApiUrl', () => {
 });
 describe('isSafeApiPath', () => {
   it('impede URL absoluta, protocol-relative e barra invertida', () => {
-    assert.equal(isSafeApiPath('/v1/patients'), true);
+    assert.equal(isSafeApiPath('/v1/batches'), true);
     assert.equal(isSafeApiPath('https://evil.test'), false);
     assert.equal(isSafeApiPath('//evil.test/x'), false);
     assert.equal(isSafeApiPath('/v1\\evil'), false);
