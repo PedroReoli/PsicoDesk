@@ -1,0 +1,1 @@
+import{describe,expect,it}from'vitest';import{formatBytes}from'./settings.types';describe('formatBytes',()=>{it('formata bytes pequenos',()=> { expect(formatBytes(512)).toBe('512 B'); });it('formata megabytes',()=> { expect(formatBytes(2*1024*1024)).toBe('2.0 MB'); });});

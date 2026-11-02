@@ -1,0 +1,2 @@
+import {describe,expect,it} from 'vitest';import {hasValidPeriod} from './appointment.types';
+describe('hasValidPeriod',()=>{const base={patientId:'p',professionalId:'u',kind:'individual'};it('rejeita período invertido',()=> { expect(hasValidPeriod({...base,startsAt:'2026-11-02T10:00',endsAt:'2026-11-02T09:00'})).toBe(false); });it('aceita período crescente',()=> { expect(hasValidPeriod({...base,startsAt:'2026-11-02T09:00',endsAt:'2026-11-02T10:00'})).toBe(true); });});

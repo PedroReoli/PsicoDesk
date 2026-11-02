@@ -1,0 +1,1 @@
+import{describe,expect,it}from'vitest';import{formatCurrency,parseCurrencyToMinor}from'./finance.types';describe('currency',()=>{it('converte valor brasileiro em centavos',()=> { expect(parseCurrencyToMinor('R$ 1.234,56')).toBe(123456); });it('formata centavos sem perder precisão',()=> { expect(formatCurrency(896000)).toContain('8.960,00'); });});
