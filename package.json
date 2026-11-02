@@ -1,0 +1,29 @@
+{
+  "name": "psicodesk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema desktop offline-first para clínicas de psicologia",
+  "license": "AGPL-3.0-or-later",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @psicodesk/desktop",
+    "build": "npm run build --workspace @psicodesk/desktop",
+    "typecheck": "npm run typecheck --workspace @psicodesk/desktop",
+    "lint": "npm run lint --workspace @psicodesk/desktop",
+    "test": "npm run test --workspace @psicodesk/desktop",
+    "test:run": "npm run test:run --workspace @psicodesk/desktop",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "tauri": "npm run tauri --workspace @psicodesk/desktop"
+  },
+  "devDependencies": {
+    "prettier": "3.9.10"
+  },
+  "engines": {
+    "node": ">=22.12.0",
+    "npm": ">=11.0.0"
+  }
+}
