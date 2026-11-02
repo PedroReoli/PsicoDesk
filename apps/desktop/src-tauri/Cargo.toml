@@ -1,6 +1,6 @@
 [package]
 name = "psicodesk"
-version = "0.1.0"
+version = "1.0.0"
 description = "PsicoDesk — gestão clínica local e segura"
 authors = ["PsicoDesk contributors"]
 edition = "2021"
