@@ -1,0 +1,56 @@
+.state,
+.error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 18rem;
+  padding: var(--space-8);
+  color: var(--color-text-muted);
+}
+
+.state strong,
+.error h1 {
+  color: var(--color-text);
+}
+
+.state p,
+.error p {
+  margin: var(--space-1) 0 0;
+}
+
+.loader {
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 3px solid var(--color-brand-100);
+  border-top-color: var(--color-brand-600);
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
+.error {
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 38rem;
+  margin: 10vh auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+}
+
+.error h1 {
+  margin: 0;
+}
+
+.errorCode {
+  color: var(--color-danger);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
