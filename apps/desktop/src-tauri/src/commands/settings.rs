@@ -13,6 +13,26 @@ use crate::{
 };
 
 #[tauri::command(rename_all = "camelCase")]
+pub fn get_session_policy(
+    state: State<'_, AppState>,
+    session_token: String,
+) -> CommandResult<AppSetting> {
+    authenticate(&state, &session_token).map_err(CommandError::from)?;
+    let db = state
+        .database
+        .lock()
+        .map_err(|_| CommandError::from(AppError::Internal("database lock poisoned".into())))?;
+    Ok(db
+        .get_setting("session_policy")
+        .map_err(CommandError::from)?
+        .unwrap_or(AppSetting {
+            key: "session_policy".into(),
+            value: json!({"autoLockMinutes": 15}),
+            updated_at: String::new(),
+        }))
+}
+
+#[tauri::command(rename_all = "camelCase")]
 pub fn get_app_settings(
     state: State<'_, AppState>,
     session_token: String,
@@ -35,6 +55,21 @@ pub fn update_app_setting(
 ) -> CommandResult<AppSetting> {
     let principal = authenticate(&state, &session_token).map_err(CommandError::from)?;
     require(&principal, Permission::ManageSettings).map_err(CommandError::from)?;
+    if input.key == "session_policy" {
+        let valid = input
+            .value
+            .as_object()
+            .filter(|value| value.len() == 1)
+            .and_then(|value| value.get("autoLockMinutes"))
+            .and_then(serde_json::Value::as_u64)
+            .is_some_and(|minutes| (1..=120).contains(&minutes));
+        if !valid {
+            return Err(AppError::Validation(
+                "O bloqueio automático deve estar entre 1 e 120 minutos.".into(),
+            )
+            .into());
+        }
+    }
     let db = state
         .database
         .lock()

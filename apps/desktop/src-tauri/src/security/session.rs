@@ -10,6 +10,13 @@ struct Session {
     principal: Principal,
     expires_at: chrono::DateTime<Utc>,
     last_activity_at: chrono::DateTime<Utc>,
+    idle_timeout: Duration,
+}
+
+impl Session {
+    fn is_valid_at(&self, now: chrono::DateTime<Utc>) -> bool {
+        self.expires_at > now && now - self.last_activity_at < self.idle_timeout
+    }
 }
 
 #[derive(Default)]
@@ -22,6 +29,7 @@ impl SessionStore {
         &self,
         principal: Principal,
         user: crate::domain::models::UserSummary,
+        idle_timeout_minutes: i64,
     ) -> Result<SessionDto, AppError> {
         let mut random = [0u8; 32];
         OsRng.fill_bytes(&mut random);
@@ -36,6 +44,7 @@ impl SessionStore {
                     principal,
                     expires_at,
                     last_activity_at: Utc::now(),
+                    idle_timeout: Duration::minutes(idle_timeout_minutes.clamp(1, 120)),
                 },
             );
         Ok(SessionDto {
@@ -51,9 +60,7 @@ impl SessionStore {
             .sessions
             .write()
             .map_err(|_| AppError::Internal("session lock poisoned".into()))?;
-        sessions.retain(|_, session| {
-            session.expires_at > now && now - session.last_activity_at < Duration::minutes(30)
-        });
+        sessions.retain(|_, session| session.is_valid_at(now));
         let session = sessions.get_mut(token).ok_or(AppError::InvalidSession)?;
         session.last_activity_at = now;
         Ok(session.principal.clone())
@@ -71,9 +78,7 @@ impl SessionStore {
             .map_err(|_| AppError::Internal("session lock poisoned".into()))?;
         let session = sessions
             .get(token)
-            .filter(|session| {
-                session.expires_at > now && now - session.last_activity_at < Duration::minutes(30)
-            })
+            .filter(|session| session.is_valid_at(now))
             .ok_or(AppError::InvalidSession)?;
         Ok(SessionDto {
             token: token.into(),
@@ -129,11 +134,35 @@ mod tests {
             status: "active".into(),
             created_at: Utc::now().to_rfc3339(),
         };
-        let session = store.create(principal, user).expect("session");
+        let session = store.create(principal, user, 15).expect("session");
         store.revoke(&session.token).expect("revoke");
         assert!(matches!(
             store.principal(&session.token),
             Err(AppError::InvalidSession)
         ));
+    }
+
+    #[test]
+    fn session_honors_configured_idle_timeout_boundaries() {
+        let now = Utc::now();
+        let principal = Principal {
+            user_id: "u1".into(),
+            display_name: "Teste".into(),
+            role: Role::Owner,
+        };
+        let one_minute = Session {
+            principal: principal.clone(),
+            expires_at: now + Duration::hours(8),
+            last_activity_at: now - Duration::seconds(61),
+            idle_timeout: Duration::minutes(1),
+        };
+        let two_hours = Session {
+            principal,
+            expires_at: now + Duration::hours(8),
+            last_activity_at: now - Duration::minutes(119),
+            idle_timeout: Duration::minutes(120),
+        };
+        assert!(!one_minute.is_valid_at(now));
+        assert!(two_hours.is_valid_at(now));
     }
 }

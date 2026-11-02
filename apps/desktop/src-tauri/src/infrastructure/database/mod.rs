@@ -14,7 +14,7 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
-    domain::models::{Role, UserSummary},
+    domain::models::{ProfessionalOption, Role, UserSummary},
     error::AppError,
 };
 
@@ -126,6 +126,20 @@ impl Database {
                 professional_registration: row.get(4)?,
                 status: row.get(5)?,
                 created_at: row.get(6)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
+    }
+
+    pub fn list_active_psychologists(&self) -> Result<Vec<ProfessionalOption>, AppError> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, display_name, professional_registration FROM users WHERE role='psychologist' AND status='active' ORDER BY display_name COLLATE NOCASE",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok(ProfessionalOption {
+                id: row.get(0)?,
+                display_name: row.get(1)?,
+                professional_registration: row.get(2)?,
             })
         })?;
         rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)

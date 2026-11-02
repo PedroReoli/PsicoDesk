@@ -101,6 +101,21 @@ pub struct Patient {
     pub version: i64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PatientOption {
+    pub id: String,
+    pub display_name: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfessionalOption {
+    pub id: String,
+    pub display_name: String,
+    pub professional_registration: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreatePatientInput {

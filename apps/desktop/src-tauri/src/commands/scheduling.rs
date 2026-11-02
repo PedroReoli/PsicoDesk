@@ -8,10 +8,34 @@ use crate::{
         validation,
     },
     commands::authenticate,
-    domain::models::{Appointment, CreateAppointmentInput, UpdateAppointmentStatusInput},
+    domain::models::{
+        Appointment, CreateAppointmentInput, ProfessionalOption, Role, UpdateAppointmentStatusInput,
+    },
     error::{AppError, CommandError, CommandResult},
     state::AppState,
 };
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn list_schedule_professionals(
+    state: State<'_, AppState>,
+    session_token: String,
+) -> CommandResult<Vec<ProfessionalOption>> {
+    let principal = authenticate(&state, &session_token).map_err(CommandError::from)?;
+    require(&principal, Permission::ManageSchedule).map_err(CommandError::from)?;
+    if principal.role == Role::Psychologist {
+        return Ok(vec![ProfessionalOption {
+            id: principal.user_id,
+            display_name: principal.display_name,
+            professional_registration: None,
+        }]);
+    }
+    state
+        .database
+        .lock()
+        .map_err(|_| CommandError::from(AppError::Internal("database lock poisoned".into())))?
+        .list_active_psychologists()
+        .map_err(Into::into)
+}
 
 #[tauri::command(rename_all = "camelCase")]
 pub fn list_appointments(
@@ -37,7 +61,11 @@ pub fn list_appointments(
         .database
         .lock()
         .map_err(|_| CommandError::from(AppError::Internal("database lock poisoned".into())))?
-        .list_appointments(&from, &to)
+        .list_appointments(
+            &from,
+            &to,
+            (principal.role == Role::Psychologist).then_some(principal.user_id.as_str()),
+        )
         .map_err(Into::into)
 }
 
@@ -63,6 +91,9 @@ pub fn create_appointment(
         "individual" | "couple" | "family" | "group" | "assessment"
     ) {
         return Err(AppError::Validation("Tipo de atendimento inválido.".into()).into());
+    }
+    if principal.role == Role::Psychologist {
+        input.professional_id = principal.user_id.clone();
     }
     input.starts_at = starts_at.to_rfc3339();
     input.ends_at = ends_at.to_rfc3339();

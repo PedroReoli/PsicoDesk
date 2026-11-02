@@ -11,6 +11,16 @@ use crate::{
 };
 
 #[tauri::command]
+pub fn needs_bootstrap(state: State<'_, AppState>) -> CommandResult<bool> {
+    let db = state.database.lock().map_err(|_| {
+        crate::error::CommandError::from(AppError::Internal("database lock poisoned".into()))
+    })?;
+    db.has_users()
+        .map(|has_users| !has_users)
+        .map_err(Into::into)
+}
+
+#[tauri::command]
 pub fn bootstrap_admin(
     state: State<'_, AppState>,
     input: BootstrapAdminInput,
@@ -52,7 +62,13 @@ pub fn bootstrap_admin(
         json!({}),
     )
     .map_err(crate::error::CommandError::from)?;
-    state.sessions.create(principal, user).map_err(Into::into)
+    let idle_timeout_minutes = db
+        .session_idle_timeout_minutes()
+        .map_err(crate::error::CommandError::from)?;
+    state
+        .sessions
+        .create(principal, user, idle_timeout_minutes)
+        .map_err(Into::into)
 }
 
 #[tauri::command]
@@ -112,9 +128,12 @@ pub fn login(state: State<'_, AppState>, input: LoginInput) -> CommandResult<Ses
         json!({}),
     )
     .map_err(crate::error::CommandError::from)?;
+    let idle_timeout_minutes = db
+        .session_idle_timeout_minutes()
+        .map_err(crate::error::CommandError::from)?;
     state
         .sessions
-        .create(principal, credential.user)
+        .create(principal, credential.user, idle_timeout_minutes)
         .map_err(Into::into)
 }
 

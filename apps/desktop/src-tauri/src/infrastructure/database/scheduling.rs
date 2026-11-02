@@ -9,11 +9,16 @@ use crate::{
 };
 
 impl Database {
-    pub fn list_appointments(&self, from: &str, to: &str) -> Result<Vec<Appointment>, AppError> {
+    pub fn list_appointments(
+        &self,
+        from: &str,
+        to: &str,
+        professional_id: Option<&str>,
+    ) -> Result<Vec<Appointment>, AppError> {
         let mut statement = self.connection.prepare(
-            "SELECT a.id, a.patient_id, p.full_name, a.professional_id, u.display_name, a.starts_at, a.ends_at, a.status, a.kind, a.recurrence_id, a.cancellation_reason, a.version FROM appointments a JOIN patients p ON p.id=a.patient_id JOIN users u ON u.id=a.professional_id WHERE a.starts_at >= ?1 AND a.starts_at < ?2 ORDER BY a.starts_at LIMIT 1000"
+            "SELECT a.id, a.patient_id, p.full_name, a.professional_id, u.display_name, a.starts_at, a.ends_at, a.status, a.kind, a.recurrence_id, a.cancellation_reason, a.version FROM appointments a JOIN patients p ON p.id=a.patient_id JOIN users u ON u.id=a.professional_id WHERE a.starts_at >= ?1 AND a.starts_at < ?2 AND (?3 IS NULL OR a.professional_id=?3) ORDER BY a.starts_at LIMIT 1000"
         )?;
-        let rows = statement.query_map(params![from, to], appointment_from_row)?;
+        let rows = statement.query_map(params![from, to, professional_id], appointment_from_row)?;
         rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
     }
 

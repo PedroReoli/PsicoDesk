@@ -4,11 +4,27 @@ use uuid::Uuid;
 
 use super::Database;
 use crate::{
-    domain::models::{CreatePatientInput, Patient, UpdatePatientInput},
+    domain::models::{CreatePatientInput, Patient, PatientOption, UpdatePatientInput},
     error::AppError,
 };
 
 impl Database {
+    pub fn list_patient_options(
+        &self,
+        professional_id: Option<&str>,
+    ) -> Result<Vec<PatientOption>, AppError> {
+        let mut statement = self.connection.prepare(
+            "SELECT p.id, COALESCE(NULLIF(p.social_name, ''), p.full_name) FROM patients p WHERE p.status='active' AND (?1 IS NULL OR EXISTS(SELECT 1 FROM patient_professionals pp WHERE pp.patient_id=p.id AND pp.professional_id=?1 AND pp.scope='clinical')) ORDER BY 2 COLLATE NOCASE LIMIT 500",
+        )?;
+        let rows = statement.query_map([professional_id], |row| {
+            Ok(PatientOption {
+                id: row.get(0)?,
+                display_name: row.get(1)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
+    }
+
     pub fn list_patients(&self, query: Option<&str>) -> Result<Vec<Patient>, AppError> {
         let pattern = format!("%{}%", query.unwrap_or_default().trim());
         let mut statement = self.connection.prepare(

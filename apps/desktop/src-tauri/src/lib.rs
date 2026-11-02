@@ -7,6 +7,9 @@ mod security;
 mod state;
 mod sync;
 
+#[cfg(test)]
+mod production_tests;
+
 use tauri::Manager;
 use tracing_subscriber::EnvFilter;
 
@@ -30,6 +33,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::auth::bootstrap_admin,
+            commands::auth::needs_bootstrap,
             commands::auth::login,
             commands::auth::logout,
             commands::auth::get_session,
@@ -37,9 +41,11 @@ pub fn run() {
             commands::users::create_user,
             commands::users::update_user_status,
             commands::patients::list_patients,
+            commands::patients::list_patient_options,
             commands::patients::create_patient,
             commands::patients::update_patient,
             commands::scheduling::list_appointments,
+            commands::scheduling::list_schedule_professionals,
             commands::scheduling::create_appointment,
             commands::scheduling::update_appointment_status,
             commands::clinical::list_clinical_records,
@@ -52,6 +58,7 @@ pub fn run() {
             commands::documents::generate_document,
             commands::reports::get_dashboard_report,
             commands::settings::get_app_settings,
+            commands::settings::get_session_policy,
             commands::settings::update_app_setting,
             commands::backup::create_backup,
             commands::backup::list_backups,

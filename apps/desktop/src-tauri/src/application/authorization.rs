@@ -97,4 +97,66 @@ mod tests {
             Permission::WriteClinicalRecords
         ));
     }
+
+    #[test]
+    fn role_matrix_matches_the_local_product_boundary() {
+        use Permission::*;
+        let all = [
+            ManageUsers,
+            ManageSettings,
+            ManagePatients,
+            ManageSchedule,
+            ReadClinicalRecords,
+            WriteClinicalRecords,
+            ManageFinance,
+            ManageDocuments,
+            ViewDashboard,
+            ManageBackups,
+        ];
+        let cases = [
+            (
+                Role::Owner,
+                vec![
+                    ManageUsers,
+                    ManageSettings,
+                    ManagePatients,
+                    ManageSchedule,
+                    ManageFinance,
+                    ManageDocuments,
+                    ViewDashboard,
+                    ManageBackups,
+                ],
+            ),
+            (
+                Role::Psychologist,
+                vec![
+                    ManagePatients,
+                    ManageSchedule,
+                    ReadClinicalRecords,
+                    WriteClinicalRecords,
+                    ManageDocuments,
+                    ViewDashboard,
+                ],
+            ),
+            (
+                Role::Receptionist,
+                vec![
+                    ManagePatients,
+                    ManageSchedule,
+                    ManageDocuments,
+                    ViewDashboard,
+                ],
+            ),
+            (Role::Finance, vec![ManageFinance, ViewDashboard]),
+        ];
+        for (role, expected) in cases {
+            for permission in all {
+                assert_eq!(
+                    permits(&role, permission),
+                    expected.contains(&permission),
+                    "unexpected permission {permission:?} for {role:?}"
+                );
+            }
+        }
+    }
 }

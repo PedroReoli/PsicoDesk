@@ -8,10 +8,32 @@ use crate::{
         validation,
     },
     commands::authenticate,
-    domain::models::{CreatePatientInput, Patient, Role, UpdatePatientInput},
+    domain::models::{CreatePatientInput, Patient, PatientOption, Role, UpdatePatientInput},
     error::{AppError, CommandError, CommandResult},
     state::AppState,
 };
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn list_patient_options(
+    state: State<'_, AppState>,
+    session_token: String,
+) -> CommandResult<Vec<PatientOption>> {
+    let principal = authenticate(&state, &session_token).map_err(CommandError::from)?;
+    if !matches!(
+        principal.role,
+        Role::Owner | Role::Admin | Role::Psychologist | Role::Receptionist | Role::Finance
+    ) {
+        return Err(AppError::Forbidden.into());
+    }
+    let professional_id =
+        (principal.role == Role::Psychologist).then_some(principal.user_id.as_str());
+    state
+        .database
+        .lock()
+        .map_err(|_| CommandError::from(AppError::Internal("database lock poisoned".into())))?
+        .list_patient_options(professional_id)
+        .map_err(Into::into)
+}
 
 #[tauri::command(rename_all = "camelCase")]
 pub fn list_patients(

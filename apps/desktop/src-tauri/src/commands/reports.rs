@@ -3,7 +3,7 @@ use tauri::State;
 use crate::{
     application::authorization::{permits, require, Permission},
     commands::authenticate,
-    domain::models::DashboardReport,
+    domain::models::{DashboardReport, Role},
     error::{AppError, CommandError, CommandResult},
     state::AppState,
 };
@@ -20,6 +20,9 @@ pub fn get_dashboard_report(
         .database
         .lock()
         .map_err(|_| CommandError::from(AppError::Internal("database lock poisoned".into())))?
-        .dashboard_report(include_finance)
+        .dashboard_report(
+            include_finance,
+            (principal.role == Role::Psychologist).then_some(principal.user_id.as_str()),
+        )
         .map_err(Into::into)
 }
