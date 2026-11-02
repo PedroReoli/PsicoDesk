@@ -9,10 +9,12 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "typecheck": "tsc --noEmit",
-    "test": "node --test src/api/backoff.test.ts src/api/config.test.ts src/auth/sessionValidation.test.ts src/security/permissions.test.ts src/sync/queuePolicy.test.ts"
+    "test": "node --experimental-transform-types --test src/api/backoff.test.ts src/api/client.test.ts src/api/config.test.ts src/auth/deviceCleanup.test.ts src/auth/provisioningValidation.test.ts src/database/projectionMaterializer.test.ts src/security/base64.test.ts src/security/batchSigning.test.ts src/sync/BatchEngine.test.ts",
+    "test:integration": "npm run build --workspace @psicodesk/api && node --experimental-transform-types --test src/integration/api.e2e.test.ts"
   },
   "dependencies": {
     "@noble/ciphers": "2.4.0",
+    "@noble/ed25519": "3.2.0",
     "@react-native-community/netinfo": "12.0.1",
     "expo": "58.0.22",
     "expo-constants": "58.0.14",
@@ -24,7 +26,7 @@
     "expo-status-bar": "58.0.4",
     "react": "19.3.0",
     "react-native": "0.88.1",
-    "react-native-safe-area-context": "5.10.1",
+    "react-native-safe-area-context": "5.11.0",
     "react-native-screens": "4.30.1"
   },
   "devDependencies": {

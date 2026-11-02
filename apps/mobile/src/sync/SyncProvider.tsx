@@ -1,76 +1,14 @@
 import NetInfo from '@react-native-community/netinfo';
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type PropsWithChildren,
-} from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 import { useAuth } from '../auth/AuthProvider';
+import { batchStore } from '../database/batchRepository';
+import { createBatchEnvelope, verifyAndOpenBatch } from '../security/batchCrypto';
+import type { SyncCounts } from '../types/sync';
+import { ApiBatchTransport, BatchEngine } from './BatchEngine';
 import { ReconnectingSocket } from './ReconnectingSocket';
-import { drainMutationQueue, queueCounts } from './mutationQueue';
-interface SyncValue {
-  online: boolean;
-  connected: boolean;
-  syncing: boolean;
-  pending: number;
-  failed: number;
-  lastSyncAt: string | null;
-  syncNow: () => Promise<void>;
-}
+interface SyncValue { online: boolean; connected: boolean; syncing: boolean; counts: SyncCounts; pending: number; failed: number; projectionVersion: number; lastSyncAt: string | null; error: string | null; syncNow: () => Promise<void>; }
+const emptyCounts: SyncCounts = { pending: 0, failed: 0, conflicts: 0, received: 0 };
 const SyncContext = createContext<SyncValue | null>(null);
-export function SyncProvider({ children }: PropsWithChildren) {
-  const { session } = useAuth();
-  const [online, setOnline] = useState(true);
-  const [connected, setConnected] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [pending, setPending] = useState(0);
-  const [failed, setFailed] = useState(0);
-  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
-  const applyCounts = useCallback((counts: { pending: number; failed: number }) => {
-    setPending(counts.pending);
-    setFailed(counts.failed);
-  }, []);
-  const syncNow = useCallback(async () => {
-    if (!session || !online || syncing) return;
-    setSyncing(true);
-    try {
-      applyCounts(await drainMutationQueue(session.accessToken));
-      setLastSyncAt(new Date().toISOString());
-    } finally {
-      setSyncing(false);
-    }
-  }, [session, online, syncing, applyCounts]);
-  useEffect(() => {
-    void queueCounts().then(applyCounts);
-    return NetInfo.addEventListener((state) => {
-      const next = Boolean(state.isConnected && state.isInternetReachable !== false);
-      setOnline(next);
-      if (next) void syncNow();
-    });
-  }, [syncNow, applyCounts]);
-  useEffect(() => {
-    if (!session) return;
-    const socket = new ReconnectingSocket(
-      session.accessToken,
-      () => {
-        void syncNow();
-      },
-      setConnected,
-    );
-    socket.start();
-    return () => socket.stop();
-  }, [session, syncNow]);
-  const value = useMemo(
-    () => ({ online, connected, syncing, pending, failed, lastSyncAt, syncNow }),
-    [online, connected, syncing, pending, failed, lastSyncAt, syncNow],
-  );
-  return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>;
-}
-export function useSync() {
-  const value = useContext(SyncContext);
-  if (!value) throw new Error('useSync deve ser usado dentro de SyncProvider.');
-  return value;
-}
+const engine = new BatchEngine(batchStore, new ApiBatchTransport(), { create: createBatchEnvelope, open: verifyAndOpenBatch });
+export function SyncProvider({ children }: PropsWithChildren) { const { credentials, getAccessToken } = useAuth(); const [online, setOnline] = useState(true); const [connected, setConnected] = useState(false); const [syncing, setSyncing] = useState(false); const [projectionVersion, setProjectionVersion] = useState(0); const lock = useRef(false); const [counts, setCounts] = useState<SyncCounts>(emptyCounts); const [lastSyncAt, setLastSyncAt] = useState<string | null>(null); const [error, setError] = useState<string | null>(null); const syncNow = useCallback(async () => { if (!credentials || !online || lock.current) return; lock.current = true; setSyncing(true); setError(null); try { setCounts(await engine.run(credentials, await getAccessToken())); setProjectionVersion((value) => value + 1); setLastSyncAt(new Date().toISOString()); } catch { setError('Não foi possível sincronizar agora. Os envelopes locais foram preservados.'); setCounts(await batchStore.counts()); } finally { lock.current = false; setSyncing(false); } }, [credentials, online, getAccessToken]); useEffect(() => { void batchStore.counts().then(setCounts); return NetInfo.addEventListener((state) => { setOnline(Boolean(state.isConnected && state.isInternetReachable !== false)); }); }, []); useEffect(() => { if (online) void syncNow(); }, [online, syncNow]); useEffect(() => { if (!credentials) return; const socket = new ReconnectingSocket(credentials, getAccessToken, (event) => { if ((event as { type?: unknown }).type === 'batch.available') void syncNow(); }, setConnected); socket.start(); return () => socket.stop(); }, [credentials, getAccessToken, syncNow]); const value = useMemo(() => ({ online, connected, syncing, counts, pending: counts.pending, failed: counts.failed, projectionVersion, lastSyncAt, error, syncNow }), [online, connected, syncing, counts, projectionVersion, lastSyncAt, error, syncNow]); return <SyncContext.Provider value={value}>{children}</SyncContext.Provider>; }
+export function useSync() { const value = useContext(SyncContext); if (!value) throw new Error('useSync deve ser usado dentro de SyncProvider.'); return value; }

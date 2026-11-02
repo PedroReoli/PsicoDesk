@@ -1,8 +1,8 @@
-import Constants from 'expo-constants';
-import { boundedRetryCount, isRetryableStatus, retryDelay } from './backoff';
-import { isSafeApiPath, normalizeApiUrl } from './config';
-const configured = process.env.EXPO_PUBLIC_API_URL ?? Constants.expoConfig?.extra?.apiUrl;
-export const API_URL = normalizeApiUrl(configured, __DEV__);
+import { boundedRetryCount, isRetryableStatus, retryDelay } from './backoff.ts';
+import { isSafeApiPath, normalizeApiUrl } from './config.ts';
+const configured = process.env.EXPO_PUBLIC_API_URL;
+const development = typeof __DEV__ !== 'undefined' && __DEV__;
+export const API_URL = normalizeApiUrl(configured, development);
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -14,12 +14,22 @@ export class ApiError extends Error {
   }
 }
 export interface RequestOptions extends Omit<RequestInit, 'body'> {
+  baseUrl?: string;
   token?: string;
   body?: unknown;
   timeoutMs?: number;
   retries?: number;
   idempotencyKey?: string;
 }
+export interface ApiDependencies {
+  fetch: (url: string, init?: RequestInit) => Promise<Response>;
+  sleep: (milliseconds: number) => Promise<void>;
+  allowInsecureDevelopment?: boolean;
+}
+const defaultDependencies: ApiDependencies = {
+  fetch: (url, init) => fetch(url, init),
+  sleep: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+};
 function safeError(status: number) {
   if (status === 401)
     return new ApiError('Sua sessão expirou. Entre novamente.', status, 'AUTH_REQUIRED');
@@ -33,17 +43,16 @@ function safeError(status: number) {
     return new ApiError('Muitas tentativas. Aguarde e tente novamente.', status, 'RATE_LIMITED');
   if (status >= 500)
     return new ApiError('O PsicoDesk está temporariamente indisponível.', status, 'SERVER_ERROR');
+  if (status === 409) return new ApiError('A operação entrou em conflito.', status, 'CONFLICT');
   return new ApiError('A solicitação não pôde ser concluída.', status, 'REQUEST_REJECTED');
 }
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  if (!API_URL)
-    throw new ApiError(
-      'Configure EXPO_PUBLIC_API_URL antes de sincronizar.',
-      0,
-      'API_NOT_CONFIGURED',
-    );
-  if (!isSafeApiPath(path)) throw new ApiError('Caminho de API inválido.', 0, 'INVALID_REQUEST');
+export async function apiRequest<T>(
+  path: string,
+  options: RequestOptions = {},
+  dependencies: ApiDependencies = defaultDependencies,
+): Promise<T> {
   const {
+    baseUrl = API_URL,
     token,
     body,
     timeoutMs = 10_000,
@@ -52,6 +61,14 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     headers,
     ...request
   } = options;
+  const normalizedBaseUrl = normalizeApiUrl(baseUrl, development || dependencies.allowInsecureDevelopment === true);
+  if (!normalizedBaseUrl)
+    throw new ApiError(
+      'Configure EXPO_PUBLIC_API_URL antes de sincronizar.',
+      0,
+      'API_NOT_CONFIGURED',
+    );
+  if (!isSafeApiPath(path)) throw new ApiError('Caminho de API inválido.', 0, 'INVALID_REQUEST');
   const method = request.method ?? 'GET';
   const retryCount = boundedRetryCount(retries, method, idempotencyKey);
   const requestTimeout = Number.isFinite(timeoutMs)
@@ -66,7 +83,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       if (body !== undefined) requestHeaders.set('Content-Type', 'application/json');
       if (token) requestHeaders.set('Authorization', `Bearer ${token}`);
       if (idempotencyKey) requestHeaders.set('Idempotency-Key', idempotencyKey);
-      const response = await fetch(`${API_URL}${path}`, {
+      const response = await dependencies.fetch(`${normalizedBaseUrl}${path}`, {
         ...request,
         signal: controller.signal,
         headers: requestHeaders,
@@ -74,9 +91,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       });
       if (!response.ok) {
         if (attempt < retryCount && isRetryableStatus(response.status)) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, retryDelay(response.headers.get('Retry-After'), attempt)),
-          );
+          await dependencies.sleep(retryDelay(response.headers.get('Retry-After'), attempt));
           continue;
         }
         throw safeError(response.status);
@@ -93,7 +108,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
           0,
           'NETWORK_ERROR',
         );
-      await new Promise((resolve) => setTimeout(resolve, retryDelay(null, attempt)));
+      await dependencies.sleep(retryDelay(null, attempt));
     } finally {
       clearTimeout(timeout);
     }
