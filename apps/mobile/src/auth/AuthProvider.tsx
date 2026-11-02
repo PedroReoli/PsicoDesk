@@ -1,108 +1,26 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type PropsWithChildren,
-} from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
+import { ApiError } from '../api/client';
 import { clearProtectedCache } from '../database/cacheRepository';
-import type { Session } from '../types/domain';
-import { authService } from './authService';
-import { deleteSession, readSession, saveSession } from './sessionStorage';
 import { deleteDataKey } from '../security/dataCipher';
-import { securityContextChanged } from './sessionValidation';
-interface AuthValue {
-  session: Session | null;
-  loading: boolean;
-  error: string | null;
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-}
+import type { DeviceCredentials, DeviceSession } from '../types/sync';
+import { issueDeviceToken, registerDevice } from './authService';
+import type { ProvisioningInput } from './provisioningValidation';
+import { deleteDevice, readDevice, saveDevice } from './sessionStorage';
+import { purgeDevice } from './deviceCleanup';
+
+interface AuthValue { session: DeviceSession | null; loading: boolean; error: string | null; provision: (input: ProvisioningInput) => Promise<void>; getAccessToken: () => Promise<string>; credentials: DeviceCredentials | null; logout: () => Promise<void>; }
 const AuthContext = createContext<AuthValue | null>(null);
-async function clearProtectedData() {
-  await clearProtectedCache().catch(() => undefined);
-  await deleteDataKey();
-}
-async function purgeLocalSession() {
-  await Promise.allSettled([deleteSession(), clearProtectedData()]);
-}
+function toSession(credentials: DeviceCredentials, accessToken: string | null, expiresAt: string | null): DeviceSession { return { serverUrl: credentials.serverUrl, clinicId: credentials.clinicId, deviceId: credentials.deviceId, deviceName: credentials.deviceName, role: credentials.role, accessToken, expiresAt }; }
+async function purgeLocalDevice() { await purgeDevice({ deleteCredentials: deleteDevice, clearDatabase: clearProtectedCache, deleteLocalKey: () => deleteDataKey().catch(() => undefined) }); }
 export function AuthProvider({ children }: PropsWithChildren) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    void (async () => {
-      try {
-        const stored = await readSession();
-        if (stored && new Date(stored.expiresAt) > new Date()) setSession(stored);
-        else if (stored) {
-          try {
-            const refreshed = await authService.refresh(stored.refreshToken);
-            if (securityContextChanged(stored, refreshed)) await clearProtectedData();
-            await saveSession(refreshed);
-            setSession(refreshed);
-          } catch {
-            await purgeLocalSession();
-          }
-        } else await purgeLocalSession();
-      } catch {
-        setSession(null);
-        await purgeLocalSession().catch(() => undefined);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
-  const login = useCallback(async (username: string, password: string) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const next = await authService.login(username, password);
-      await saveSession(next);
-      setSession(next);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Não foi possível entrar.');
-      throw cause;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-  const logout = useCallback(async () => {
-    const current = session;
-    setSession(null);
-    await Promise.allSettled([
-      current ? authService.logout(current.accessToken, current.refreshToken) : Promise.resolve(),
-      purgeLocalSession(),
-    ]);
-  }, [session]);
-  useEffect(() => {
-    if (!session) return;
-    const refreshIn = Math.max(5_000, new Date(session.expiresAt).getTime() - Date.now() - 60_000);
-    const timer = setTimeout(() => {
-      void (async () => {
-        try {
-          const refreshed = await authService.refresh(session.refreshToken);
-          if (securityContextChanged(session, refreshed)) await clearProtectedData();
-          await saveSession(refreshed);
-          setSession(refreshed);
-        } catch {
-          setSession(null);
-          await purgeLocalSession().catch(() => undefined);
-        }
-      })();
-    }, refreshIn);
-    return () => clearTimeout(timer);
-  }, [session]);
-  const value = useMemo(
-    () => ({ session, loading, error, login, logout }),
-    [session, loading, error, login, logout],
-  );
+  const [session, setSession] = useState<DeviceSession | null>(null); const [credentials, setCredentials] = useState<DeviceCredentials | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null); const credentialsRef = useRef<DeviceCredentials | null>(null); const sessionRef = useRef<DeviceSession | null>(null);
+  const apply = useCallback((nextCredentials: DeviceCredentials | null, nextSession: DeviceSession | null) => { credentialsRef.current = nextCredentials; sessionRef.current = nextSession; setCredentials(nextCredentials); setSession(nextSession); }, []);
+  const refreshToken = useCallback(async (current: DeviceCredentials) => { const token = await issueDeviceToken(current); const next = toSession(current, token.accessToken, token.expiresAt); await saveDevice({ credentials: current, ...token }); apply(current, next); return token.accessToken; }, [apply]);
+  useEffect(() => { void (async () => { try { const stored = await readDevice(); if (!stored) return; const offlineSession = toSession(stored.credentials, stored.accessToken, stored.expiresAt); apply(stored.credentials, offlineSession); const validUntil = stored.expiresAt ? Date.parse(stored.expiresAt) : 0; if (!stored.accessToken || validUntil <= Date.now() + 60_000) await refreshToken(stored.credentials); } catch (cause) { if (cause instanceof ApiError && cause.code === 'AUTH_REQUIRED') { await purgeLocalDevice(); apply(null, null); setError('O dispositivo não está mais autorizado. Provisione novamente.'); } } finally { setLoading(false); } })(); }, [apply, refreshToken]);
+  const provision = useCallback(async (input: ProvisioningInput) => { setLoading(true); setError(null); try { const nextCredentials = await registerDevice(input); const token = await issueDeviceToken(nextCredentials); await purgeLocalDevice(); await saveDevice({ credentials: nextCredentials, ...token }); apply(nextCredentials, toSession(nextCredentials, token.accessToken, token.expiresAt)); } catch (cause) { setError(cause instanceof Error ? cause.message : 'Não foi possível provisionar o dispositivo.'); throw cause; } finally { setLoading(false); } }, [apply]);
+  const getAccessToken = useCallback(async () => { const currentCredentials = credentialsRef.current; const currentSession = sessionRef.current; if (!currentCredentials || !currentSession) throw new ApiError('Dispositivo não provisionado.', 401, 'AUTH_REQUIRED'); if (currentSession.accessToken && currentSession.expiresAt && Date.parse(currentSession.expiresAt) > Date.now() + 60_000) return currentSession.accessToken; return refreshToken(currentCredentials); }, [refreshToken]);
+  const logout = useCallback(async () => { apply(null, null); await purgeLocalDevice(); }, [apply]);
+  const value = useMemo(() => ({ session, loading, error, provision, getAccessToken, credentials, logout }), [session, loading, error, provision, getAccessToken, credentials, logout]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-export function useAuth() {
-  const value = useContext(AuthContext);
-  if (!value) throw new Error('useAuth deve ser usado dentro de AuthProvider.');
-  return value;
-}
+export function useAuth() { const value = useContext(AuthContext); if (!value) throw new Error('useAuth deve ser usado dentro de AuthProvider.'); return value; }
