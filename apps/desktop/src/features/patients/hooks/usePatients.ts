@@ -34,5 +34,12 @@ export function usePatients(query: string) {
     return patient;
   }
 
-  return { patients, loading, error, reload: load, create };
+  async function update(patientId: string, input: PatientInput) {
+    if (!session) throw new Error('Sessão expirada.');
+    const patient = await patientsService.update(session.token, patientId, input);
+    setPatients((current) => current.map((item) => (item.id === patient.id ? patient : item)));
+    return patient;
+  }
+
+  return { patients, loading, error, reload: load, create, update };
 }

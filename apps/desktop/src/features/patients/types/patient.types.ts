@@ -6,6 +6,7 @@ export interface Patient {
   email?: string | null;
   status: 'active' | 'inactive';
   createdAt: string;
+  version: number;
 }
 
 export interface PatientInput {
@@ -13,6 +14,8 @@ export interface PatientInput {
   socialName?: string;
   phone?: string;
   email?: string;
+  status?: 'active' | 'inactive';
+  version?: number;
 }
 
 export function validatePatient(input: PatientInput) {

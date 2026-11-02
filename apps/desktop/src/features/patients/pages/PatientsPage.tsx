@@ -7,12 +7,14 @@ import { Input } from '../../../design-system/primitives/Input';
 import { Badge } from '../../../design-system/primitives/Badge';
 import { PatientForm } from '../components/PatientForm';
 import { usePatients } from '../hooks/usePatients';
+import type { Patient } from '../types/patient.types';
 import styles from '../styles/patients.module.css';
 
 export default function PatientsPage() {
   const [query, setQuery] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
-  const { patients, loading, error, reload, create } = usePatients(query);
+  const [editing, setEditing] = useState<Patient | null>(null);
+  const { patients, loading, error, reload, create, update } = usePatients(query);
 
   return (
     <section className={styles.page}>
@@ -89,23 +91,29 @@ export default function PatientsPage() {
               <Badge tone={patient.status === 'active' ? 'success' : 'neutral'}>
                 {patient.status === 'active' ? 'Ativo' : 'Inativo'}
               </Badge>
+              <Button variant="ghost" onClick={() => { setEditing(patient); setPanelOpen(true); }}>Editar</Button>
             </article>
           ))}
         </div>
       )}
       <RightPanel
         open={panelOpen}
-        title="Novo paciente"
+        title={editing ? 'Editar paciente' : 'Novo paciente'}
         description="Somente informações cadastrais. O prontuário possui acesso separado."
         onClose={() => {
           setPanelOpen(false);
+          setEditing(null);
         }}
         footer={null}
       >
         <PatientForm
+          key={editing?.id ?? 'new'}
+          {...(editing ? { initial: { fullName: editing.fullName, ...(editing.socialName ? { socialName: editing.socialName } : {}), ...(editing.phone ? { phone: editing.phone } : {}), ...(editing.email ? { email: editing.email } : {}), status: editing.status, version: editing.version } } : {})}
           onSubmit={async (input) => {
-            await create(input);
+            if (editing) await update(editing.id, input);
+            else await create(input);
             setPanelOpen(false);
+            setEditing(null);
           }}
         />
       </RightPanel>
