@@ -1,0 +1,5 @@
+.empty { display: grid; justify-items: center; gap: var(--space-3); padding: var(--space-10); text-align: center; color: var(--color-text-muted); }
+.icon { display: grid; place-items: center; width: 3rem; height: 3rem; color: var(--color-brand-600); background: var(--color-brand-50); border-radius: 50%; }
+.empty h2 { margin: 0; color: var(--color-text); font-size: var(--text-lg); }
+.empty p { max-width: 30rem; margin: 0 0 var(--space-2); line-height: 1.5; }
+

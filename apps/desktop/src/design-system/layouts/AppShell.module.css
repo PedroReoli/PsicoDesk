@@ -1,0 +1,5 @@
+.shell { display: flex; width: 100vw; height: 100vh; overflow: hidden; }
+.workspace { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; flex: 1; background: radial-gradient(circle at 92% 0%, rgb(18 165 137 / 7%), transparent 24rem), var(--color-surface-subtle); }
+.skipLink { position: fixed; top: var(--space-3); left: var(--space-3); z-index: 100; padding: var(--space-3) var(--space-4); color: white; background: var(--color-brand-700); border-radius: var(--radius-sm); transform: translateY(-150%); }
+.skipLink:focus { transform: translateY(0); }
+

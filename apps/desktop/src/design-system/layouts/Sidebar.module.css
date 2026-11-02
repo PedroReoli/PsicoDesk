@@ -1,0 +1,17 @@
+.sidebar { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; width: var(--sidebar-width); min-width: var(--sidebar-width); height: 100vh; color: #e7fffa; background: linear-gradient(180deg, #0b3e3a 0%, #082e2c 72%, #062624 100%); border-right: 1px solid rgb(255 255 255 / 8%); transition: width 180ms ease, min-width 180ms ease; }
+.collapsed { width: 4.75rem; min-width: 4.75rem; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-height: var(--header-height); padding: var(--space-4); border-bottom: 1px solid rgb(255 255 255 / 8%); }
+.top button { color: #bce8df; padding: 0 .35rem; }
+.navigation { display: flex; flex-direction: column; gap: .25rem; padding: var(--space-4) var(--space-3); overflow-y: auto; }
+.link { display: flex; align-items: center; gap: var(--space-3); min-height: 2.65rem; padding: 0 var(--space-3); color: #b8d3cf; border-radius: var(--radius-sm); font-size: var(--text-sm); font-weight: 580; text-decoration: none; white-space: nowrap; transition: color 140ms ease, background-color 140ms ease; }
+.link:hover { color: white; background: rgb(255 255 255 / 7%); }
+.active { color: white; background: linear-gradient(90deg, rgb(18 165 137 / 38%), rgb(18 165 137 / 18%)); box-shadow: inset 3px 0 0 var(--color-brand-400); }
+.collapsed .link { justify-content: center; padding: 0; }
+.bottom { display: grid; gap: var(--space-3); padding: var(--space-3); border-top: 1px solid rgb(255 255 255 / 8%); }
+.profile { display: flex; align-items: center; gap: var(--space-3); min-width: 0; padding: var(--space-2); }
+.avatar { display: grid; place-items: center; width: 2rem; height: 2rem; flex: 0 0 auto; color: var(--color-brand-900); background: #b7eedf; border-radius: 50%; font-size: .68rem; font-weight: 800; }
+.profile > span:last-child { display: grid; min-width: 0; }
+.profile strong { overflow: hidden; font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+.profile small { margin-top: 2px; color: #8fb7b1; font-size: .65rem; }
+@media (max-width: 50rem) { .sidebar { width: 4.75rem; min-width: 4.75rem; } .sidebar .wordmark { display: none; } }
+
