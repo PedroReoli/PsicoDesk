@@ -2,11 +2,19 @@
 
 Este documento reúne decisões que precisam de validação antes de transformar o SDD em implementação. Nenhum item abaixo deve ser tratado como decidido por inferência.
 
+## Decisões confirmadas em 02/11/2026
+
+- Nome canônico: `PsicoDesk`.
+- A referência visual será seguida em aproximadamente 80%, com melhorias justificadas de UX, acessibilidade e segurança.
+- O objetivo é um produto final, não apenas um protótipo.
+- O produto será open source.
+- A primeira arquitetura operacional suporta apenas um PC, com múltiplos usuários locais.
+- A proibição de modais também inclui seletores nativos do sistema; fluxos equivalentes devem ocorrer no `RightPanel` ou em páginas dedicadas.
+- O intercâmbio por API e a sincronização multi-PC ficam fora da arquitetura ativa enquanto o produto for single-PC.
+
 ## Produto e identidade
 
-1. Qual é o nome canônico: `PsicoDesk`, `PsychoDesk` ou `SicoDesk`? O diretório, o SDD e o cabeçalho da referência visual divergem.
-2. A imagem anexada é apenas referência conceitual ou contrato visual a ser reproduzido com fidelidade?
-3. Qual é o recorte da primeira entrega: fundação técnica, protótipo navegável ou MVP funcional com persistência?
+1. Quais elementos dos 20% de liberdade visual devem ser avaliados com usuários no piloto?
 
 ## Descoberta e operação clínica
 
@@ -24,12 +32,8 @@ Este documento reúne decisões que precisam de validação antes de transformar
 
 ## Arquitetura e distribuição
 
-12. A instalação será por usuário ou por máquina, e quais privilégios administrativos poderão ser exigidos?
-13. O primeiro piloto funcionará em um único computador? Se houver múltiplos PCs, qual instância será proprietária de cada registro?
-14. O intercâmbio de cargas e a API opcional fazem parte do MVP ou de uma fase posterior isolada?
-15. Qual será o modelo de licenciamento offline e o comportamento durante indisponibilidade prolongada?
-16. A proibição de modais inclui seletores nativos do Windows e prompts inevitáveis do sistema, ou apenas interfaces de formulário construídas pela aplicação?
+12. A instalação por usuário, sem privilégios administrativos por padrão, atende ao ambiente do piloto?
 
 ## Repositório remoto
 
-17. O repositório deve permanecer apenas local ou ser publicado no GitHub? Para publicação faltam organização/conta de destino e visibilidade pública ou privada.
+13. Em qual conta ou organização do GitHub o repositório público será publicado?
