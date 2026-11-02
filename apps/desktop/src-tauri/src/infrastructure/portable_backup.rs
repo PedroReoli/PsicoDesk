@@ -30,6 +30,7 @@ const KDF_ITERATIONS: u32 = 3;
 const KDF_LANES: u32 = 1;
 const HEADER_LEN: usize = 8 + 2 + 4 + 4 + 4 + 4 + 8 + SALT_LEN + NONCE_PREFIX_LEN;
 const MAX_CONTAINER_BYTES: u64 = 64 * 1024 * 1024 * 1024;
+type DerivedKeys = (Zeroizing<Vec<u8>>, Zeroizing<Vec<u8>>);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -310,10 +311,7 @@ fn decode_header(bytes: &[u8; HEADER_LEN]) -> Result<Header, AppError> {
     })
 }
 
-fn derive_keys(
-    passphrase: &str,
-    salt: &[u8],
-) -> Result<(Zeroizing<Vec<u8>>, Zeroizing<Vec<u8>>), AppError> {
+fn derive_keys(passphrase: &str, salt: &[u8]) -> Result<DerivedKeys, AppError> {
     let params = Params::new(KDF_MEMORY_KIB, KDF_ITERATIONS, KDF_LANES, Some(32))
         .map_err(|_| AppError::Security("Parâmetros de proteção inválidos.".into()))?;
     let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);

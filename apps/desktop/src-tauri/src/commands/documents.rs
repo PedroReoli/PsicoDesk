@@ -220,13 +220,14 @@ pub fn export_document(
         .take(80)
         .collect();
     let file_name = format!(
-        "{}-{}.txt",
+        "{}-{}-{}.txt",
         if safe_title.is_empty() {
             "documento"
         } else {
             &safe_title
         },
-        format!("{}-{}", document.id, Uuid::new_v4())
+        document.id,
+        Uuid::new_v4()
     );
     let destination = exports.join(file_name);
     let temporary = destination.with_extension("tmp");
