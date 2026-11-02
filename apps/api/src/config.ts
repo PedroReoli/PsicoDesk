@@ -1,10 +1,10 @@
-import { z } from "zod";
+import { z } from 'zod';
 
-const booleanString = z.enum(["true", "false"]).transform((value) => value === "true");
+const booleanString = z.enum(['true', 'false']).transform((value) => value === 'true');
 
 export const configSchema = z.object({
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  HOST: z.string().default("127.0.0.1"),
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  HOST: z.string().default('127.0.0.1'),
   PORT: z.coerce.number().int().min(1).max(65_535).default(8787),
   DATABASE_URL: z.url(),
   JWT_SECRET: z.string().min(32),
@@ -22,4 +22,3 @@ export type ApiConfig = z.infer<typeof configSchema>;
 export function loadConfig(environment: NodeJS.ProcessEnv = process.env): ApiConfig {
   return configSchema.parse(environment);
 }
-

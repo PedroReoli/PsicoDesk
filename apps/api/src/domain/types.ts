@@ -5,9 +5,15 @@ import type {
   SyncChange,
   SyncConflict,
   SyncPush,
-} from "@psicodesk/sync-protocol";
+} from '@psicodesk/sync-protocol';
 
-export type Scope = "batches:read" | "batches:write" | "sync:read" | "sync:write" | "uploads:write" | "realtime:connect";
+export type Scope =
+  | 'batches:read'
+  | 'batches:write'
+  | 'sync:read'
+  | 'sync:write'
+  | 'uploads:write'
+  | 'realtime:connect';
 
 export interface Principal {
   clinicId: string;
@@ -19,7 +25,7 @@ export interface DeviceIdentity {
   clinicId: string;
   deviceId: string;
   secretHash: string;
-  status: "active" | "revoked";
+  status: 'active' | 'revoked';
   scopes: readonly Scope[];
 }
 
@@ -56,4 +62,3 @@ export interface PushSyncCommand {
   principal: Principal;
   input: SyncPush;
 }
-
