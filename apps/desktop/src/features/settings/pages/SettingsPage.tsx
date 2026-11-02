@@ -6,10 +6,14 @@ import { Button } from '../../../design-system/primitives/Button';
 import { Input } from '../../../design-system/primitives/Input';
 import { RestoreBackupPanel } from '../components/RestoreBackupPanel';
 import { UserForm } from '../components/UserForm';
+import { SyncSettingsPanel } from '../components/SyncSettingsPanel';
 import { useSettings } from '../hooks/useSettings';
 import { formatBytes, type BackupInfo } from '../types/settings.types';
 import styles from '../styles/settings.module.css';
-import { useAuthSession } from '../../auth/hooks/useAuthSession';
+import {
+  SESSION_POLICY_UPDATED_EVENT,
+  useAuthSession,
+} from '../../auth/hooks/useAuthSession';
 
 const roleLabel = {
   owner: 'Proprietário',
@@ -62,6 +66,12 @@ export default function SettingsPage() {
     }
   }
 
+  async function saveSessionPolicy() {
+    const value = { autoLockMinutes: Number(autoLockValue) };
+    await update('session_policy', value);
+    window.dispatchEvent(new CustomEvent(SESSION_POLICY_UPDATED_EVENT, { detail: value }));
+  }
+
   return (
     <section className={styles.page}>
       <PageHeader
@@ -96,14 +106,13 @@ export default function SettingsPage() {
               />
               <Button
                 variant="secondary"
-                onClick={() =>
-                  void update('session_policy', { autoLockMinutes: Number(autoLockValue) })
-                }
+                onClick={() => void saveSessionPolicy()}
               >
                 Salvar
               </Button>
             </div>
           </section>
+          <SyncSettingsPanel />
           <section className={styles.card}>
             <div className={styles.cardHeader}>
               <div>

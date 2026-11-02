@@ -95,6 +95,16 @@ impl SessionStore {
         Ok(())
     }
 
+    pub fn update_idle_timeout(&self, token: &str, minutes: i64) -> Result<(), AppError> {
+        let mut sessions = self
+            .sessions
+            .write()
+            .map_err(|_| AppError::Internal("session lock poisoned".into()))?;
+        let session = sessions.get_mut(token).ok_or(AppError::InvalidSession)?;
+        session.idle_timeout = Duration::minutes(minutes.clamp(1, 120));
+        Ok(())
+    }
+
     pub fn revoke_user(&self, user_id: &str) -> Result<(), AppError> {
         self.sessions
             .write()
@@ -164,5 +174,33 @@ mod tests {
         };
         assert!(!one_minute.is_valid_at(now));
         assert!(two_hours.is_valid_at(now));
+    }
+
+    #[test]
+    fn active_session_accepts_updated_idle_timeout() {
+        let store = SessionStore::default();
+        let principal = Principal {
+            user_id: "u1".into(),
+            display_name: "Teste".into(),
+            role: Role::Owner,
+        };
+        let user = UserSummary {
+            id: "u1".into(),
+            display_name: "Teste".into(),
+            username: "teste".into(),
+            role: Role::Owner,
+            professional_registration: None,
+            status: "active".into(),
+            created_at: Utc::now().to_rfc3339(),
+        };
+        let session = store.create(principal, user, 15).expect("session");
+        store
+            .update_idle_timeout(&session.token, 120)
+            .expect("update");
+        let sessions = store.sessions.read().expect("read");
+        assert_eq!(
+            sessions[&session.token].idle_timeout,
+            Duration::minutes(120)
+        );
     }
 }

@@ -87,5 +87,12 @@ pub fn update_app_setting(
         json!({}),
     )
     .map_err(CommandError::from)?;
+    if input.key == "session_policy" {
+        let minutes = input.value["autoLockMinutes"].as_i64().unwrap_or(15);
+        state
+            .sessions
+            .update_idle_timeout(&session_token, minutes)
+            .map_err(CommandError::from)?;
+    }
     Ok(setting)
 }

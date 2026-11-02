@@ -22,6 +22,7 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+export const SESSION_POLICY_UPDATED_EVENT = 'psicodesk:session-policy-updated';
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Não foi possível concluir a autenticação.';
@@ -77,6 +78,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return () => {
       window.removeEventListener(SESSION_INVALID_EVENT, invalidate);
     };
+  }, []);
+
+  useEffect(() => {
+    const updatePolicy = (event: Event) => {
+      setAutoLockMinutes(readAutoLockMinutes((event as CustomEvent).detail));
+    };
+    window.addEventListener(SESSION_POLICY_UPDATED_EVENT, updatePolicy);
+    return () => { window.removeEventListener(SESSION_POLICY_UPDATED_EVENT, updatePolicy); };
   }, []);
 
   useEffect(() => {
