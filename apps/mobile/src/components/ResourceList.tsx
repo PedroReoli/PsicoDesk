@@ -1,0 +1,6 @@
+import type { ReactNode } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { colors, spacing } from '../theme/tokens';
+import { StateView } from './StateView';
+export function ResourceList<T>({ data, loading, refreshing, error, onRefresh, keyFor, renderItem, emptyTitle }: { data: readonly T[]; loading: boolean; refreshing: boolean; error: string | null; onRefresh: () => void; keyFor: (item: T) => string; renderItem: (item: T) => ReactNode; emptyTitle: string }) { if (loading && data.length === 0) return <StateView state="loading" title="Carregando…" />; if (error && data.length === 0) return <StateView state="error" title="Não foi possível carregar" description={error} onRetry={onRefresh} />; if (data.length === 0) return <StateView state="empty" title={emptyTitle} description="Puxe para atualizar quando este computador estiver conectado ao PsicoDesk." />; return <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brand} />} contentContainerStyle={styles.list}>{data.map((item) => <View key={keyFor(item)}>{renderItem(item)}</View>)}</ScrollView>; }
+const styles = StyleSheet.create({ list: { gap: spacing.md, paddingBottom: spacing.xxl } });
