@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "PsicoDesk",
+    "slug": "psicodesk-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "psicodesk",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router",
+      ["expo-secure-store", { "configureAndroidBackup": true, "faceIDPermission": "Permita ao PsicoDesk proteger o acesso aos dados da clínica." }]
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.psicodesk.mobile",
+      "infoPlist": { "ITSAppUsesNonExemptEncryption": false }
+    },
+    "android": {
+      "package": "com.psicodesk.mobile",
+      "adaptiveIcon": { "backgroundColor": "#087f70" },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": true
+    },
+    "experiments": { "typedRoutes": true },
+    "extra": { "apiUrl": "" }
+  }
+}
