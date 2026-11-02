@@ -2,6 +2,9 @@ import { invokeCommand } from '../../../shared/services/tauriClient';
 import type { BootstrapAdminInput, LoginInput, Session } from '../types/auth.types';
 
 export const authService = {
+  needsBootstrap() {
+    return invokeCommand<boolean>('needs_bootstrap');
+  },
   login(input: LoginInput) {
     return invokeCommand<Session>('login', { input });
   },
@@ -13,5 +16,8 @@ export const authService = {
   },
   getSession(sessionToken: string) {
     return invokeCommand<Session>('get_session', { sessionToken });
+  },
+  getSessionPolicy(sessionToken: string) {
+    return invokeCommand<{ value: unknown }>('get_session_policy', { sessionToken });
   },
 };

@@ -9,6 +9,7 @@ import { UserForm } from '../components/UserForm';
 import { useSettings } from '../hooks/useSettings';
 import { formatBytes, type BackupInfo } from '../types/settings.types';
 import styles from '../styles/settings.module.css';
+import { useAuthSession } from '../../auth/hooks/useAuthSession';
 
 const roleLabel = {
   owner: 'Proprietário',
@@ -19,6 +20,7 @@ const roleLabel = {
 } as const;
 
 export default function SettingsPage() {
+  const { session } = useAuthSession();
   const {
     settings,
     backups,
@@ -30,6 +32,7 @@ export default function SettingsPage() {
     createBackup,
     restore,
     createUser,
+    updateUserStatus,
   } = useSettings();
   const [selected, setSelected] = useState<BackupInfo | null>(null);
   const [userPanel, setUserPanel] = useState(false);
@@ -40,8 +43,14 @@ export default function SettingsPage() {
     [settings],
   );
 
+  const sessionPolicy = values.session_policy;
   const configuredAutoLock =
-    typeof values.autoLockMinutes === 'number' ? String(values.autoLockMinutes) : '15';
+    sessionPolicy &&
+    typeof sessionPolicy === 'object' &&
+    'autoLockMinutes' in sessionPolicy &&
+    typeof sessionPolicy.autoLockMinutes === 'number'
+      ? String(sessionPolicy.autoLockMinutes)
+      : '15';
   const autoLockValue = autoLock || configuredAutoLock;
 
   async function backup() {
@@ -87,7 +96,9 @@ export default function SettingsPage() {
               />
               <Button
                 variant="secondary"
-                onClick={() => void update('autoLockMinutes', Number(autoLockValue))}
+                onClick={() =>
+                  void update('session_policy', { autoLockMinutes: Number(autoLockValue) })
+                }
               >
                 Salvar
               </Button>
@@ -122,7 +133,22 @@ export default function SettingsPage() {
                         @{user.username} · {roleLabel[user.role]}
                       </p>
                     </div>
-                    <span>{user.status === 'active' ? 'Ativo' : 'Inativo'}</span>
+                    <div className={styles.userActions}>
+                      <span>{user.status === 'active' ? 'Ativo' : 'Inativo'}</span>
+                      {user.id !== session?.user.id && (
+                        <Button
+                          variant="ghost"
+                          onClick={() =>
+                            void updateUserStatus(
+                              user.id,
+                              user.status === 'active' ? 'inactive' : 'active',
+                            )
+                          }
+                        >
+                          {user.status === 'active' ? 'Desativar' : 'Reativar'}
+                        </Button>
+                      )}
+                    </div>
                   </article>
                 ))}
               </div>

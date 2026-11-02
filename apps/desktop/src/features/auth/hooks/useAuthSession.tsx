@@ -9,6 +9,8 @@ import {
 } from 'react';
 import { authService } from '../services/auth.service';
 import type { BootstrapAdminInput, LoginInput, Session } from '../types/auth.types';
+import { DEFAULT_AUTO_LOCK_MINUTES, readAutoLockMinutes } from '../sessionPolicy';
+import { SESSION_INVALID_EVENT } from '../../../shared/services/tauriClient';
 
 interface AuthContextValue {
   session: Session | null;
@@ -29,12 +31,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState<Session | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [autoLockMinutes, setAutoLockMinutes] = useState(DEFAULT_AUTO_LOCK_MINUTES);
 
   const execute = useCallback(async (operation: () => Promise<Session>) => {
     setBusy(true);
     setError(null);
     try {
-      setSession(await operation());
+      const nextSession = await operation();
+      setSession(nextSession);
+      const policy = await authService.getSessionPolicy(nextSession.token).catch(() => null);
+      setAutoLockMinutes(readAutoLockMinutes(policy?.value));
     } catch (cause) {
       setError(errorMessage(cause));
       throw cause;
@@ -63,11 +69,22 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [session]);
 
   useEffect(() => {
+    const invalidate = () => {
+      setSession(null);
+      setError('Sua sessão expirou. Entre novamente.');
+    };
+    window.addEventListener(SESSION_INVALID_EVENT, invalidate);
+    return () => {
+      window.removeEventListener(SESSION_INVALID_EVENT, invalidate);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!session) return;
-    let timer = window.setTimeout(() => void logout(), 15 * 60 * 1000);
+    let timer = window.setTimeout(() => void logout(), autoLockMinutes * 60 * 1000);
     const reset = () => {
       window.clearTimeout(timer);
-      timer = window.setTimeout(() => void logout(), 15 * 60 * 1000);
+      timer = window.setTimeout(() => void logout(), autoLockMinutes * 60 * 1000);
     };
     const events = ['pointerdown', 'keydown', 'focus'] as const;
     events.forEach((event) => {
@@ -79,7 +96,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         window.removeEventListener(event, reset);
       });
     };
-  }, [session, logout]);
+  }, [session, logout, autoLockMinutes]);
 
   const value = useMemo(
     () => ({ session, busy, error, login, bootstrap, logout }),

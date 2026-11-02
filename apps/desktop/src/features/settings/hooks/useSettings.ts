@@ -37,6 +37,11 @@ export function useSettings() {
     const updated = await settingsService.update(session.token, key, value);
     setSettings((current) => [...current.filter((item) => item.key !== key), updated]);
   }
+  async function updateUserStatus(userId: string, status: 'active' | 'inactive') {
+    if (!session) throw new Error('Sessão expirada.');
+    const user = await settingsService.updateUserStatus(session.token, userId, status);
+    setUsers((current) => current.map((item) => (item.id === user.id ? user : item)));
+  }
   async function createBackup() {
     if (!session) throw new Error('Sessão expirada.');
     const backup = await settingsService.createBackup(session.token);
@@ -62,5 +67,6 @@ export function useSettings() {
     createBackup,
     restore,
     createUser,
+    updateUserStatus,
   };
 }

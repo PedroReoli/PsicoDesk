@@ -1,15 +1,33 @@
-import { useState, type SyntheticEvent } from 'react';
+import { useEffect, useState, type SyntheticEvent } from 'react';
 import { Button } from '../../../design-system/primitives/Button';
 import { Input } from '../../../design-system/primitives/Input';
 import { useAuthSession } from '../hooks/useAuthSession';
+import { authService } from '../services/auth.service';
 import styles from '../styles/auth.module.css';
 
 export function LoginPage() {
   const { login, bootstrap, busy, error } = useAuthSession();
   const [firstAccess, setFirstAccess] = useState(false);
+  const [checkingAccess, setCheckingAccess] = useState(true);
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    void authService
+      .needsBootstrap()
+      .then((needed) => {
+        if (active) setFirstAccess(needed);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setCheckingAccess(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -32,6 +50,7 @@ export function LoginPage() {
         <p>Agenda, pacientes, prontuários e financeiro em uma experiência offline e protegida.</p>
       </section>
       <section className={styles.card} aria-label="Acesso ao PsicoDesk">
+        {checkingAccess && <p role="status">Verificando configuração local…</p>}
         <div className={styles.mode} role="group" aria-label="Tipo de acesso">
           <Button
             variant={firstAccess ? 'ghost' : 'primary'}
@@ -82,7 +101,7 @@ export function LoginPage() {
             onChange={(event) => {
               setPassword(event.target.value);
             }}
-            minLength={10}
+            minLength={12}
             required
             autoComplete={firstAccess ? 'new-password' : 'current-password'}
           />
