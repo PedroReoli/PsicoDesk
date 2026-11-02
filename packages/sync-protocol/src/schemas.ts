@@ -1,13 +1,17 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 export const uuidSchema = z.uuid();
 export const isoDateTimeSchema = z.iso.datetime({ offset: true });
 export const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/i);
-export const base64Schema = z.string().min(4).max(28_000_000).regex(/^[A-Za-z0-9+/]*={0,2}$/);
-export const cursorSchema = z.string().regex(/^\d+$/).default("0");
+export const base64Schema = z
+  .string()
+  .min(4)
+  .max(28_000_000)
+  .regex(/^[A-Za-z0-9+/]*={0,2}$/);
+export const cursorSchema = z.string().regex(/^\d+$/).default('0');
 
 export const encryptionMetadataSchema = z.object({
-  algorithm: z.enum(["xchacha20-poly1305", "aes-256-gcm"]),
+  algorithm: z.enum(['xchacha20-poly1305', 'aes-256-gcm']),
   keyId: z.string().min(1).max(128),
   nonce: z.string().min(16).max(128),
 });
@@ -27,11 +31,22 @@ const createBatchBaseSchema = z.object({
 
 export const createBatchSchema = createBatchBaseSchema.superRefine((value, context) => {
   if (Date.parse(value.expiresAt) <= Date.parse(value.createdAt)) {
-    context.addIssue({ code: "custom", path: ["expiresAt"], message: "expiresAt deve ser posterior a createdAt" });
+    context.addIssue({
+      code: 'custom',
+      path: ['expiresAt'],
+      message: 'expiresAt deve ser posterior a createdAt',
+    });
   }
 });
 
-export const batchStatusSchema = z.enum(["pending", "downloaded", "applied", "rejected", "deleted", "expired"]);
+export const batchStatusSchema = z.enum([
+  'pending',
+  'downloaded',
+  'applied',
+  'rejected',
+  'deleted',
+  'expired',
+]);
 export const batchMetadataSchema = createBatchBaseSchema.omit({ payloadBase64: true }).extend({
   clinicId: uuidSchema,
   status: batchStatusSchema,
@@ -40,14 +55,20 @@ export const batchMetadataSchema = createBatchBaseSchema.omit({ payloadBase64: t
 });
 
 export const acknowledgeBatchSchema = z.object({
-  status: z.enum(["applied", "rejected"]),
+  status: z.enum(['applied', 'rejected']),
   importedAt: isoDateTimeSchema,
   resultHash: sha256Schema.optional(),
 });
 
-export const syncOperationSchema = z.enum(["upsert", "delete"]);
+export const syncOperationSchema = z.enum(['upsert', 'delete']);
 export const syncEntityTypeSchema = z.enum([
-  "patient", "appointment", "clinical_record", "charge", "payment", "document", "setting",
+  'patient',
+  'appointment',
+  'clinical_record',
+  'charge',
+  'payment',
+  'document',
+  'setting',
 ]);
 
 export const pushChangeSchema = z.object({
@@ -94,11 +115,15 @@ export const syncPullResultSchema = z.object({
   hasMore: z.boolean(),
 });
 
-export const realtimeEventSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("batch.available"), batchId: uuidSchema }),
-  z.object({ type: z.literal("sync.available"), cursor: cursorSchema }),
-  z.object({ type: z.literal("device.presence"), deviceId: uuidSchema, status: z.enum(["online", "offline"]) }),
-  z.object({ type: z.literal("pong"), at: isoDateTimeSchema }),
+export const realtimeEventSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('batch.available'), batchId: uuidSchema }),
+  z.object({ type: z.literal('sync.available'), cursor: cursorSchema }),
+  z.object({
+    type: z.literal('device.presence'),
+    deviceId: uuidSchema,
+    status: z.enum(['online', 'offline']),
+  }),
+  z.object({ type: z.literal('pong'), at: isoDateTimeSchema }),
 ]);
 
 export type CreateBatch = z.infer<typeof createBatchSchema>;
@@ -110,4 +135,3 @@ export type SyncConflict = z.infer<typeof syncConflictSchema>;
 export type SyncPushResult = z.infer<typeof syncPushResultSchema>;
 export type SyncPullResult = z.infer<typeof syncPullResultSchema>;
 export type RealtimeEvent = z.infer<typeof realtimeEventSchema>;
-
