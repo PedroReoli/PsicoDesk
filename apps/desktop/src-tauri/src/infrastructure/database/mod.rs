@@ -2,6 +2,7 @@ mod clinical;
 mod documents;
 mod finance;
 mod patients;
+mod recovery;
 mod reports;
 mod scheduling;
 mod settings;

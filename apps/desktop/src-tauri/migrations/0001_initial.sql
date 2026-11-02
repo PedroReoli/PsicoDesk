@@ -148,6 +148,15 @@ CREATE TABLE IF NOT EXISTS app_settings (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS password_recovery (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  failed_attempts INTEGER NOT NULL DEFAULT 0 CHECK (failed_attempts >= 0),
+  locked_until TEXT,
+  created_at TEXT NOT NULL
+);
+
 INSERT OR IGNORE INTO schema_migrations(version, applied_at)
 VALUES (1, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
 
