@@ -1,0 +1,14 @@
+export const commandNames = {
+  bootstrapAdmin: "bootstrap_admin", login: "login", logout: "logout", getSession: "get_session",
+  listUsers: "list_users", createUser: "create_user", updateUserStatus: "update_user_status",
+  listPatients: "list_patients", createPatient: "create_patient", updatePatient: "update_patient",
+  listAppointments: "list_appointments", createAppointment: "create_appointment", updateAppointmentStatus: "update_appointment_status",
+  listClinicalRecords: "list_clinical_records", createClinicalRecord: "create_clinical_record", createClinicalAmendment: "create_clinical_amendment",
+  listCharges: "list_charges", createCharge: "create_charge", registerPayment: "register_payment",
+  listDocuments: "list_documents", generateDocument: "generate_document", getDashboardReport: "get_dashboard_report",
+  getAppSettings: "get_app_settings", updateAppSetting: "update_app_setting",
+  createBackup: "create_backup", listBackups: "list_backups", restoreBackup: "restore_backup",
+} as const;
+
+export type CommandName = (typeof commandNames)[keyof typeof commandNames];
+
