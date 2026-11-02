@@ -1,5 +1,6 @@
 import type {
   AcknowledgeBatch,
+  BatchListResult,
   BatchMetadata,
   CreateBatch,
   SyncChange,
@@ -13,12 +14,14 @@ export type Scope =
   | 'sync:read'
   | 'sync:write'
   | 'uploads:write'
-  | 'realtime:connect';
+  | 'realtime:connect'
+  | 'devices:read';
 
 export interface Principal {
   clinicId: string;
   deviceId: string;
   scopes: readonly Scope[];
+  signingPublicKey: string | null;
 }
 
 export interface DeviceIdentity {
@@ -27,6 +30,16 @@ export interface DeviceIdentity {
   secretHash: string;
   status: 'active' | 'revoked';
   scopes: readonly Scope[];
+  name: string;
+  signingPublicKey: string | null;
+  signingKeyFingerprint: string | null;
+}
+
+export interface DeviceEnrollment {
+  clinicId: string;
+  enrollmentTokenHash: string;
+  scopes: readonly Scope[];
+  expiresAt: string;
 }
 
 export interface StoredBatch extends BatchMetadata {
@@ -45,6 +58,8 @@ export interface PullOutcome {
   nextCursor: string;
   hasMore: boolean;
 }
+
+export type BatchListOutcome = BatchListResult;
 
 export interface CreateBatchCommand {
   principal: Principal;

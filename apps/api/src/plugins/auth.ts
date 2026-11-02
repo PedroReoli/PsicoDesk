@@ -33,6 +33,7 @@ const authPluginImplementation: FastifyPluginAsync<AuthPluginOptions> = async (a
         clinicId: device.clinicId,
         deviceId: device.deviceId,
         scopes: device.scopes,
+        signingPublicKey: device.signingPublicKey,
       };
     } catch {
       throw errors.unauthenticated();

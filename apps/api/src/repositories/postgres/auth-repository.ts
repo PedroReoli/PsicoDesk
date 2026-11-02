@@ -8,6 +8,9 @@ interface DeviceRow {
   secret_hash: string;
   status: 'active' | 'revoked';
   scopes: Scope[];
+  name: string;
+  signing_public_key: string | null;
+  signing_key_fingerprint: string | null;
 }
 
 export class PostgresAuthRepository implements AuthRepository {
@@ -15,7 +18,8 @@ export class PostgresAuthRepository implements AuthRepository {
 
   async findDevice(clinicId: string, deviceId: string): Promise<DeviceIdentity | null> {
     const result = await this.database.query<DeviceRow>(
-      `SELECT clinic_id, id AS device_id, secret_hash, status, scopes
+      `SELECT clinic_id, id AS device_id, secret_hash, status, scopes, name,
+              signing_public_key, signing_key_fingerprint
        FROM devices WHERE clinic_id = $1 AND id = $2`,
       [clinicId, deviceId],
     );
@@ -27,6 +31,9 @@ export class PostgresAuthRepository implements AuthRepository {
           secretHash: row.secret_hash,
           status: row.status,
           scopes: row.scopes,
+          name: row.name,
+          signingPublicKey: row.signing_public_key,
+          signingKeyFingerprint: row.signing_key_fingerprint,
         }
       : null;
   }

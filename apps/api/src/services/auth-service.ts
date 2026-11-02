@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type { DeviceIdentity } from '../domain/types.js';
 import { errors } from '../domain/errors.js';
 import type { AuthRepository } from '../repositories/contracts.js';
@@ -31,6 +31,10 @@ export class AuthService {
 
   hashSecret(secret: string): string {
     return createHmac('sha256', this.pepper).update(secret, 'utf8').digest('hex');
+  }
+
+  static fingerprintSigningKey(publicKey: string): string {
+    return createHash('sha256').update(Buffer.from(publicKey, 'base64')).digest('hex');
   }
 }
 
