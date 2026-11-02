@@ -8,6 +8,13 @@ export interface BackupInfo {
   createdAt: string;
   sizeBytes: number;
 }
+export interface PortableBackupInfo extends BackupInfo {
+  directory: string;
+}
+export interface RecoveryCode {
+  code: string;
+  expiresAt: string;
+}
 export type ManagedUserRole = 'admin' | 'psychologist' | 'receptionist' | 'finance';
 export interface ManagedUser {
   id: string;

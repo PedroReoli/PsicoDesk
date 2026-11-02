@@ -37,6 +37,8 @@ pub fn run() {
             commands::auth::login,
             commands::auth::logout,
             commands::auth::get_session,
+            commands::auth::generate_password_recovery_code,
+            commands::auth::recover_password,
             commands::users::list_users,
             commands::users::create_user,
             commands::users::update_user_status,

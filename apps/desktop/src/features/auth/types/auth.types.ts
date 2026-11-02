@@ -24,3 +24,9 @@ export interface LoginInput {
 export interface BootstrapAdminInput extends LoginInput {
   displayName: string;
 }
+
+export interface RecoverPasswordInput {
+  username: string;
+  recoveryCode: string;
+  newPassword: string;
+}

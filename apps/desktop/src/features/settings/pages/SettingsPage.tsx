@@ -7,6 +7,7 @@ import { Input } from '../../../design-system/primitives/Input';
 import { RestoreBackupPanel } from '../components/RestoreBackupPanel';
 import { UserForm } from '../components/UserForm';
 import { SyncSettingsPanel } from '../components/SyncSettingsPanel';
+import { RecoveryBackupSettings } from '../components/RecoveryBackupSettings';
 import { useSettings } from '../hooks/useSettings';
 import { formatBytes, type BackupInfo } from '../types/settings.types';
 import styles from '../styles/settings.module.css';
@@ -113,6 +114,7 @@ export default function SettingsPage() {
             </div>
           </section>
           <SyncSettingsPanel />
+          <RecoveryBackupSettings />
           <section className={styles.card}>
             <div className={styles.cardHeader}>
               <div>
