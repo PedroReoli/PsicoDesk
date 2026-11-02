@@ -4,10 +4,19 @@ export interface Appointment {
   patientId: string;
   patientName: string;
   professionalId: string;
+  professionalName: string;
   startsAt: string;
   endsAt: string;
   status: AppointmentStatus;
-  notes?: string | null;
+  cancellationReason?: string | null;
+  version: number;
+}
+export interface AppointmentUpdateInput {
+  status: AppointmentStatus;
+  cancellationReason?: string;
+  startsAt?: string;
+  endsAt?: string;
+  version: number;
 }
 export interface AppointmentInput {
   patientId: string;

@@ -5,6 +5,8 @@ import { EmptyState } from '../../../design-system/composites/EmptyState';
 import { Button } from '../../../design-system/primitives/Button';
 import { Badge } from '../../../design-system/primitives/Badge';
 import { AppointmentForm } from '../components/AppointmentForm';
+import { AppointmentActions } from '../components/AppointmentActions';
+import type { Appointment } from '../types/appointment.types';
 import { useAppointments } from '../hooks/useAppointments';
 import styles from '../styles/scheduling.module.css';
 const statusLabel = {
@@ -17,7 +19,8 @@ const statusLabel = {
 export default function SchedulingPage() {
   const [reference, setReference] = useState(() => new Date());
   const [panel, setPanel] = useState(false);
-  const { items, loading, error, reload, create } = useAppointments(reference);
+  const [selected, setSelected] = useState<Appointment | null>(null);
+  const { items, loading, error, reload, create, update } = useAppointments(reference);
   function shift(days: number) {
     setReference((current) => {
       const next = new Date(current);
@@ -86,7 +89,7 @@ export default function SchedulingPage() {
       ) : (
         <div className={styles.timeline}>
           {items.map((item) => (
-            <article key={item.id} className={styles.slot}>
+            <article key={item.id} className={styles.slot} onClick={() => { setSelected(item); }}>
               <time dateTime={item.startsAt}>
                 {new Date(item.startsAt).toLocaleTimeString('pt-BR', {
                   hour: '2-digit',
@@ -122,6 +125,9 @@ export default function SchedulingPage() {
             setPanel(false);
           }}
         />
+      </RightPanel>
+      <RightPanel open={Boolean(selected)} title="Atualizar agendamento" description="Altere status ou remarque mantendo o controle de versão." onClose={() => { setSelected(null); }}>
+        {selected && <AppointmentActions key={`${selected.id}-${String(selected.version)}`} appointment={selected} onUpdate={async (input) => { await update(selected.id, input); setSelected(null); }} />}
       </RightPanel>
     </section>
   );
