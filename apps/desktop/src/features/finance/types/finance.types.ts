@@ -5,9 +5,16 @@ export interface Charge {
   patientName: string;
   description: string;
   amountMinor: number;
+  paidMinor: number;
   dueDate: string;
   status: ChargeStatus;
   createdAt: string;
+}
+export type PaymentMethod = 'cash' | 'pix' | 'card' | 'transfer' | 'other';
+export interface PaymentInput {
+  amountMinor: number;
+  method: PaymentMethod;
+  paidAt: string;
 }
 export interface ChargeInput {
   patientId: string;

@@ -53,6 +53,20 @@
   display: grid;
   gap: 18px;
 }
+
+.methodPicker {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.methodPicker div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
 .error {
   color: var(--color-danger);
 }

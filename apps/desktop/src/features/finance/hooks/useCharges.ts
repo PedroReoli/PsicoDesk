@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuthSession } from '../../auth/hooks/useAuthSession';
 import { financeService } from '../services/finance.service';
-import type { Charge, ChargeInput, ChargeStatus } from '../types/finance.types';
+import type { Charge, ChargeInput, ChargeStatus, PaymentInput } from '../types/finance.types';
 export function useCharges(status?: ChargeStatus) {
   const { session } = useAuthSession();
   const [charges, setCharges] = useState<Charge[]>([]);
@@ -28,5 +28,10 @@ export function useCharges(status?: ChargeStatus) {
     const charge = await financeService.create(session.token, input);
     setCharges((current) => [charge, ...current]);
   }
-  return { charges, loading, error, reload: load, create };
+  async function registerPayment(chargeId: string, input: PaymentInput) {
+    if (!session) throw new Error('Sessão expirada.');
+    await financeService.registerPayment(session.token, chargeId, input);
+    await load();
+  }
+  return { charges, loading, error, reload: load, create, registerPayment };
 }

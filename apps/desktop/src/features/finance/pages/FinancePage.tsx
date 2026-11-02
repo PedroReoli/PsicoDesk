@@ -5,8 +5,9 @@ import { EmptyState } from '../../../design-system/composites/EmptyState';
 import { Button } from '../../../design-system/primitives/Button';
 import { Badge } from '../../../design-system/primitives/Badge';
 import { ChargeForm } from '../components/ChargeForm';
+import { PaymentForm } from '../components/PaymentForm';
 import { useCharges } from '../hooks/useCharges';
-import { formatCurrency, type ChargeStatus } from '../types/finance.types';
+import { formatCurrency, type Charge, type ChargeStatus } from '../types/finance.types';
 import styles from '../styles/finance.module.css';
 const labels = {
   pending: 'Pendente',
@@ -17,7 +18,8 @@ const labels = {
 export default function FinancePage() {
   const [filter, setFilter] = useState<ChargeStatus | undefined>();
   const [panel, setPanel] = useState(false);
-  const { charges, loading, error, reload, create } = useCharges(filter);
+  const [paymentCharge, setPaymentCharge] = useState<Charge | null>(null);
+  const { charges, loading, error, reload, create, registerPayment } = useCharges(filter);
   const summary = useMemo(
     () => charges.reduce((total, item) => total + item.amountMinor, 0),
     [charges],
@@ -105,6 +107,16 @@ export default function FinancePage() {
               >
                 {labels[charge.status]}
               </Badge>
+              {charge.status !== 'paid' && charge.status !== 'cancelled' && (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setPaymentCharge(charge);
+                  }}
+                >
+                  Registrar recebimento
+                </Button>
+              )}
             </article>
           ))}
         </div>
@@ -123,6 +135,24 @@ export default function FinancePage() {
             setPanel(false);
           }}
         />
+      </RightPanel>
+      <RightPanel
+        open={Boolean(paymentCharge)}
+        title="Registrar recebimento"
+        description={paymentCharge ? `${paymentCharge.patientName} · saldo ${formatCurrency(paymentCharge.amountMinor - paymentCharge.paidMinor)}` : undefined}
+        onClose={() => {
+          setPaymentCharge(null);
+        }}
+      >
+        {paymentCharge && (
+          <PaymentForm
+            balanceMinor={paymentCharge.amountMinor - paymentCharge.paidMinor}
+            onSubmit={async (input) => {
+              await registerPayment(paymentCharge.id, input);
+              setPaymentCharge(null);
+            }}
+          />
+        )}
       </RightPanel>
     </section>
   );
