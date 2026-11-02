@@ -64,6 +64,7 @@ pub fn run() {
             commands::backup::list_backups,
             commands::backup::restore_backup,
             commands::sync::get_sync_config,
+            commands::sync::get_sync_device_identity,
             commands::sync::update_sync_config,
             commands::sync::get_sync_status,
             commands::sync::start_sync,

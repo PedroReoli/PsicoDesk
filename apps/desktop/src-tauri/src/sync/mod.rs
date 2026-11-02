@@ -7,7 +7,7 @@ mod runtime;
 use crate::{error::AppError, state::AppState};
 use thiserror::Error;
 
-pub use crypto::decode_encryption_key;
+pub use crypto::{decode_encryption_key, load_signing_key, public_identity};
 pub use repository::{get_config, save_config, DbContext};
 pub use runtime::{RuntimeCredentials, SyncRuntime};
 

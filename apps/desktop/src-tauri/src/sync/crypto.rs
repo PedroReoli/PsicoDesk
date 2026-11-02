@@ -33,6 +33,11 @@ pub fn load_signing_key(path: &Path) -> Result<SigningKey, SyncError> {
     Ok(SigningKey::from_bytes(&bytes))
 }
 
+pub fn public_identity(key: &SigningKey) -> (String, String) {
+    let bytes = key.verifying_key().to_bytes();
+    (STANDARD.encode(bytes), hex::encode(Sha256::digest(bytes)))
+}
+
 pub fn encrypt(plaintext: &[u8], key: &[u8]) -> Result<(String, String), SyncError> {
     let cipher = Aes256Gcm::new_from_slice(key)
         .map_err(|_| SyncError::Crypto("chave de criptografia inválida".into()))?;
@@ -75,24 +80,34 @@ pub fn sign_envelope(envelope: &mut BatchEnvelope, key: &SigningKey) {
 
 pub fn verify_envelope(
     envelope: &BatchEnvelope,
-    trusted_public_key: &str,
+    peer_public_key: &str,
+    peer_fingerprint: &str,
 ) -> Result<(), SyncError> {
-    if envelope.signer_public_key != trusted_public_key {
+    if envelope.signer_public_key != peer_public_key {
         return Err(SyncError::InvalidBatch(
             "identidade do assinante não confiável".into(),
         ));
     }
-    if envelope.content_hash != hash_ciphertext(&envelope.payload_ciphertext)? {
+    if !envelope
+        .content_hash
+        .eq_ignore_ascii_case(&hash_ciphertext(&envelope.payload_base64)?)
+    {
         return Err(SyncError::InvalidBatch(
             "hash do conteúdo não corresponde ao lote".into(),
         ));
     }
     let expected = STANDARD
-        .decode(trusted_public_key)
+        .decode(peer_public_key)
         .map_err(|_| SyncError::InvalidConfig("chave pública confiável inválida".into()))?;
     let expected: [u8; 32] = expected
         .try_into()
         .map_err(|_| SyncError::InvalidConfig("chave pública confiável inválida".into()))?;
+    let actual_fingerprint = hex::encode(Sha256::digest(expected));
+    if !actual_fingerprint.eq_ignore_ascii_case(peer_fingerprint) {
+        return Err(SyncError::InvalidBatch(
+            "fingerprint do dispositivo pareado não corresponde".into(),
+        ));
+    }
     let signature = STANDARD
         .decode(&envelope.signature)
         .map_err(|_| SyncError::InvalidBatch("assinatura inválida".into()))?;
@@ -124,23 +139,75 @@ mod tests {
     fn signature_and_hash_reject_tampering() {
         let signing = SigningKey::from_bytes(&[9u8; 32]);
         let (nonce, ciphertext) = encrypt(b"[]", &[3u8; 32]).expect("encrypt");
+        let public_key = STANDARD.encode(signing.verifying_key().to_bytes());
         let mut envelope = BatchEnvelope {
             schema_version: SYNC_SCHEMA_VERSION,
-            batch_id: "batch-1".into(),
-            origin_id: "device-a".into(),
-            target_id: "clinic-a".into(),
+            batch_id: "0f927a23-df4a-4eb2-8c9d-b8cd03c54ccb".into(),
+            origin_device_id: "ee4e9f12-0a1f-4e59-aac6-44277b5786e9".into(),
+            target_device_id: "18cc9817-dbd6-4fc0-89a4-eda41c00e098".into(),
             created_at: Utc::now().to_rfc3339(),
             expires_at: (Utc::now() + Duration::minutes(10)).to_rfc3339(),
             content_hash: hash_ciphertext(&ciphertext).expect("hash"),
             signature: String::new(),
             signer_public_key: String::new(),
-            nonce,
-            payload_ciphertext: ciphertext,
+            encryption: crate::sync::models::EncryptionMetadata {
+                algorithm: "aes-256-gcm".into(),
+                key_id: "clinic-key:v1".into(),
+                nonce,
+            },
+            payload_base64: ciphertext,
         };
         sign_envelope(&mut envelope, &signing);
-        let trusted = STANDARD.encode(signing.verifying_key().to_bytes());
-        verify_envelope(&envelope, &trusted).expect("valid envelope");
-        envelope.payload_ciphertext.push('x');
-        assert!(verify_envelope(&envelope, &trusted).is_err());
+        let fingerprint = hex::encode(Sha256::digest(signing.verifying_key().to_bytes()));
+        verify_envelope(&envelope, &public_key, &fingerprint).expect("valid envelope");
+        envelope.payload_base64.push('x');
+        assert!(verify_envelope(&envelope, &public_key, &fingerprint).is_err());
+    }
+
+    #[test]
+    fn signing_bytes_match_typescript_cross_language_vector() {
+        let envelope = BatchEnvelope {
+            schema_version: 1,
+            batch_id: "0f927a23-df4a-4eb2-8c9d-b8cd03c54ccb".into(),
+            origin_device_id: "0f927a23-df4a-4eb2-8c9d-b8cd03c54ccb".into(),
+            target_device_id: "ee4e9f12-0a1f-4e59-aac6-44277b5786e9".into(),
+            created_at: "2026-11-02T12:00:00Z".into(),
+            expires_at: "2026-11-02T12:10:00Z".into(),
+            content_hash: "A".repeat(64),
+            signer_public_key: format!("{}=", "A".repeat(43)),
+            signature: format!("{}==", "A".repeat(86)),
+            encryption: crate::sync::models::EncryptionMetadata {
+                algorithm: "aes-256-gcm".into(),
+                key_id: "clinic-key:v1".into(),
+                nonce: "YWJjZGVmZ2hpamts".into(),
+            },
+            payload_base64: "dGVzdGU=".into(),
+        };
+        assert_eq!(
+            String::from_utf8(envelope.signing_bytes()).expect("utf8"),
+            [
+                "psicodesk-batch-v1",
+                "1",
+                "0f927a23-df4a-4eb2-8c9d-b8cd03c54ccb",
+                "0f927a23-df4a-4eb2-8c9d-b8cd03c54ccb",
+                "ee4e9f12-0a1f-4e59-aac6-44277b5786e9",
+                "2026-11-02T12:00:00Z",
+                "2026-11-02T12:10:00Z",
+                &"a".repeat(64),
+                "aes-256-gcm",
+                "clinic-key:v1",
+                "YWJjZGVmZ2hpamts",
+                "dGVzdGU=",
+            ]
+            .join("\n")
+        );
+    }
+
+    #[test]
+    fn public_identity_fingerprint_is_sha256_of_public_key_bytes() {
+        let key = SigningKey::from_bytes(&[7u8; 32]);
+        let (public_key, fingerprint) = public_identity(&key);
+        let decoded = STANDARD.decode(public_key).expect("base64");
+        assert_eq!(fingerprint, hex::encode(Sha256::digest(decoded)));
     }
 }

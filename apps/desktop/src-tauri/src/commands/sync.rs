@@ -1,7 +1,9 @@
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use tauri::State;
 use url::Url;
+use uuid::Uuid;
 
 use crate::{
     application::{
@@ -10,13 +12,33 @@ use crate::{
     },
     commands::authenticate,
     error::{AppError, CommandError, CommandResult},
+    security::key_store,
     state::AppState,
     sync::{
         self,
-        models::{StartSyncInput, SyncConfig, SyncStatus, UpdateSyncConfigInput},
+        models::{
+            StartSyncInput, SyncConfig, SyncDeviceIdentity, SyncStatus, UpdateSyncConfigInput,
+        },
         DbContext, RuntimeCredentials, SyncRuntime,
     },
 };
+
+#[tauri::command(rename_all = "camelCase")]
+pub fn get_sync_device_identity(
+    state: State<'_, AppState>,
+    session_token: String,
+) -> CommandResult<SyncDeviceIdentity> {
+    let principal = authenticate(&state, &session_token).map_err(CommandError::from)?;
+    require(&principal, Permission::ManageSettings).map_err(CommandError::from)?;
+    let key = sync::load_signing_key(&state.data_dir.join("sync-signing-key.dpapi"))
+        .map_err(AppError::from)
+        .map_err(CommandError::from)?;
+    let (signing_public_key, signing_key_fingerprint) = sync::public_identity(&key);
+    Ok(SyncDeviceIdentity {
+        signing_public_key,
+        signing_key_fingerprint,
+    })
+}
 
 #[tauri::command(rename_all = "camelCase")]
 pub fn get_sync_config(
@@ -43,7 +65,23 @@ pub fn update_sync_config(
 ) -> CommandResult<SyncConfig> {
     let principal = authenticate(&state, &session_token).map_err(CommandError::from)?;
     require(&principal, Permission::ManageSettings).map_err(CommandError::from)?;
+    let device_secret = input.device_secret.clone();
     let config = validate_config(input).map_err(CommandError::from)?;
+    if let Some(secret) = device_secret {
+        if secret.trim().len() < 32 || secret.len() > 512 {
+            return Err(AppError::Validation("Segredo do dispositivo inválido.".into()).into());
+        }
+        key_store::store_secret(
+            &state.data_dir.join("sync-device-secret.dpapi"),
+            secret.as_bytes(),
+        )
+        .map_err(CommandError::from)?;
+    } else if !state.data_dir.join("sync-device-secret.dpapi").is_file() {
+        return Err(AppError::Validation(
+            "Informe o segredo do dispositivo no primeiro pareamento.".into(),
+        )
+        .into());
+    }
     runtime.stop();
     let database = state
         .database
@@ -102,7 +140,11 @@ pub fn start_sync(
     let encryption_key = sync::decode_encryption_key(&input.encryption_key_base64)
         .map_err(AppError::from)
         .map_err(CommandError::from)?;
-    let credentials = RuntimeCredentials::new(input.access_token, encryption_key)
+    let device_secret = key_store::load_secret(&state.data_dir.join("sync-device-secret.dpapi"))
+        .map_err(CommandError::from)?;
+    let device_secret = String::from_utf8(device_secret)
+        .map_err(|_| CommandError::from(AppError::Security("Segredo local inválido.".into())))?;
+    let credentials = RuntimeCredentials::new(device_secret, encryption_key)
         .map_err(AppError::from)
         .map_err(CommandError::from)?;
     let database = DbContext::from_state(&state);
@@ -196,39 +238,49 @@ fn validate_config(input: UpdateSyncConfigInput) -> Result<SyncConfig, AppError>
             "O endpoint deve ser uma origem HTTPS sem credenciais, query ou fragmento.".into(),
         ));
     }
-    let clinic_id = validate_identifier(&input.clinic_id, "clínica")?;
-    let device_id = validate_identifier(&input.device_id, "dispositivo")?;
-    let public_key = input.trusted_server_public_key.trim().to_string();
-    let decoded = STANDARD
-        .decode(&public_key)
-        .map_err(|_| AppError::Validation("Chave pública do servidor inválida.".into()))?;
+    let clinic_id = validate_uuid(&input.clinic_id, "clínica")?;
+    let device_id = validate_uuid(&input.device_id, "dispositivo")?;
+    let target_device_id = validate_uuid(&input.target_device_id, "dispositivo pareado")?;
+    if device_id == target_device_id {
+        return Err(AppError::Validation(
+            "O dispositivo pareado deve ser diferente deste dispositivo.".into(),
+        ));
+    }
+    let public_key = input.peer_signing_public_key.trim().to_string();
+    let decoded = STANDARD.decode(&public_key).map_err(|_| {
+        AppError::Validation("Chave pública do dispositivo pareado inválida.".into())
+    })?;
     if decoded.len() != 32 {
         return Err(AppError::Validation(
-            "Chave pública do servidor inválida.".into(),
+            "Chave pública do dispositivo pareado inválida.".into(),
+        ));
+    }
+    let fingerprint = input.peer_signing_key_fingerprint.trim().to_lowercase();
+    let calculated = hex::encode(Sha256::digest(&decoded));
+    if fingerprint.len() != 64
+        || !fingerprint.bytes().all(|value| value.is_ascii_hexdigit())
+        || fingerprint != calculated
+    {
+        return Err(AppError::Validation(
+            "Fingerprint do dispositivo pareado inválido.".into(),
         ));
     }
     Ok(SyncConfig {
         endpoint,
         clinic_id,
         device_id,
-        trusted_server_public_key: public_key,
+        target_device_id,
+        peer_signing_public_key: public_key,
+        peer_signing_key_fingerprint: fingerprint,
         enabled: input.enabled,
     })
 }
 
-fn validate_identifier(value: &str, label: &str) -> Result<String, AppError> {
+fn validate_uuid(value: &str, label: &str) -> Result<String, AppError> {
     let value = value.trim();
-    if value.is_empty()
-        || value.len() > 120
-        || !value
-            .bytes()
-            .all(|character| character.is_ascii_alphanumeric() || matches!(character, b'-' | b'_'))
-    {
-        return Err(AppError::Validation(format!(
-            "Identificador de {label} inválido."
-        )));
-    }
-    Ok(value.to_string())
+    Uuid::parse_str(value)
+        .map(|parsed| parsed.to_string())
+        .map_err(|_| AppError::Validation(format!("Identificador de {label} inválido.")))
 }
 
 fn endpoint_origin(endpoint: &str) -> Option<String> {
@@ -244,11 +296,15 @@ mod tests {
 
     #[test]
     fn configuration_rejects_insecure_endpoint() {
+        let key = [1u8; 32];
         let input = UpdateSyncConfigInput {
             endpoint: "http://example.com".into(),
-            clinic_id: "clinic-a".into(),
-            device_id: "device-a".into(),
-            trusted_server_public_key: STANDARD.encode([1u8; 32]),
+            clinic_id: "0f927a23-df4a-4eb2-8c9d-b8cd03c54ccb".into(),
+            device_id: "ee4e9f12-0a1f-4e59-aac6-44277b5786e9".into(),
+            target_device_id: "18cc9817-dbd6-4fc0-89a4-eda41c00e098".into(),
+            peer_signing_public_key: STANDARD.encode(key),
+            peer_signing_key_fingerprint: hex::encode(Sha256::digest(key)),
+            device_secret: Some("s".repeat(32)),
             enabled: true,
         };
         assert!(validate_config(input).is_err());
@@ -256,11 +312,15 @@ mod tests {
 
     #[test]
     fn configuration_accepts_https_without_secrets() {
+        let key = [1u8; 32];
         let input = UpdateSyncConfigInput {
             endpoint: "https://sync.example.com".into(),
-            clinic_id: "clinic-a".into(),
-            device_id: "device_01".into(),
-            trusted_server_public_key: STANDARD.encode([1u8; 32]),
+            clinic_id: "0f927a23-df4a-4eb2-8c9d-b8cd03c54ccb".into(),
+            device_id: "ee4e9f12-0a1f-4e59-aac6-44277b5786e9".into(),
+            target_device_id: "18cc9817-dbd6-4fc0-89a4-eda41c00e098".into(),
+            peer_signing_public_key: STANDARD.encode(key),
+            peer_signing_key_fingerprint: hex::encode(Sha256::digest(key)),
+            device_secret: Some("s".repeat(32)),
             enabled: true,
         };
         let config = validate_config(input).expect("valid config");

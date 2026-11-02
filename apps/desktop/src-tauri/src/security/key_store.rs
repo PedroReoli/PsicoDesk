@@ -18,6 +18,24 @@ pub fn load_or_create(path: &Path) -> Result<Vec<u8>, AppError> {
     Ok(key)
 }
 
+pub fn store_secret(path: &Path, secret: &[u8]) -> Result<(), AppError> {
+    if secret.is_empty() {
+        return Err(AppError::Validation("Segredo local vazio.".into()));
+    }
+    let protected = protect(secret)?;
+    let temporary = path.with_extension("tmp");
+    fs::write(&temporary, protected)?;
+    fs::rename(temporary, path)?;
+    Ok(())
+}
+
+pub fn load_secret(path: &Path) -> Result<Vec<u8>, AppError> {
+    if !path.is_file() {
+        return Err(AppError::NotFound);
+    }
+    unprotect(&fs::read(path)?)
+}
+
 #[cfg(windows)]
 fn protect(input: &[u8]) -> Result<Vec<u8>, AppError> {
     use std::{ptr, slice};

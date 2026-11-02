@@ -40,27 +40,62 @@ impl DbContext {
 }
 
 pub fn initialize_schema(state: &AppState) -> Result<(), SyncError> {
-    state
+    let database = state
         .database
         .lock()
-        .map_err(|_| SyncError::State("database lock poisoned".into()))?
+        .map_err(|_| SyncError::State("database lock poisoned".into()))?;
+    database
         .connection
         .execute_batch(include_str!("../../migrations/0002_sync.sql"))?;
+    ensure_config_column(
+        &database.connection,
+        "target_device_id",
+        "TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_config_column(
+        &database.connection,
+        "peer_signing_public_key",
+        "TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_config_column(
+        &database.connection,
+        "peer_signing_key_fingerprint",
+        "TEXT NOT NULL DEFAULT ''",
+    )?;
+    Ok(())
+}
+
+fn ensure_config_column(
+    connection: &Connection,
+    name: &str,
+    declaration: &str,
+) -> Result<(), SyncError> {
+    let mut statement = connection.prepare("PRAGMA table_info(sync_config)")?;
+    let names = statement
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    if !names.iter().any(|value| value == name) {
+        connection.execute_batch(&format!(
+            "ALTER TABLE sync_config ADD COLUMN {name} {declaration}"
+        ))?;
+    }
     Ok(())
 }
 
 pub fn get_config(connection: &Connection) -> Result<Option<SyncConfig>, SyncError> {
     connection
         .query_row(
-            "SELECT endpoint, clinic_id, device_id, trusted_server_public_key, enabled FROM sync_config WHERE id = 1",
+            "SELECT endpoint, clinic_id, device_id, target_device_id, peer_signing_public_key, peer_signing_key_fingerprint, enabled FROM sync_config WHERE id = 1",
             [],
             |row| {
                 Ok(SyncConfig {
                     endpoint: row.get(0)?,
                     clinic_id: row.get(1)?,
                     device_id: row.get(2)?,
-                    trusted_server_public_key: row.get(3)?,
-                    enabled: row.get::<_, i64>(4)? == 1,
+                    target_device_id: row.get(3)?,
+                    peer_signing_public_key: row.get(4)?,
+                    peer_signing_key_fingerprint: row.get(5)?,
+                    enabled: row.get::<_, i64>(6)? == 1,
                 })
             },
         )
@@ -70,18 +105,21 @@ pub fn get_config(connection: &Connection) -> Result<Option<SyncConfig>, SyncErr
 
 pub fn save_config(connection: &Connection, config: &SyncConfig) -> Result<(), SyncError> {
     connection.execute(
-        "INSERT INTO sync_config(id, endpoint, clinic_id, device_id, trusted_server_public_key, enabled, updated_at)
-         VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6)
+        "INSERT INTO sync_config(id, endpoint, clinic_id, device_id, trusted_server_public_key, enabled, updated_at, target_device_id, peer_signing_public_key, peer_signing_key_fingerprint)
+         VALUES (1, ?1, ?2, ?3, '', ?4, ?5, ?6, ?7, ?8)
          ON CONFLICT(id) DO UPDATE SET endpoint=excluded.endpoint, clinic_id=excluded.clinic_id,
-         device_id=excluded.device_id, trusted_server_public_key=excluded.trusted_server_public_key,
-         enabled=excluded.enabled, updated_at=excluded.updated_at",
+         device_id=excluded.device_id, enabled=excluded.enabled, updated_at=excluded.updated_at,
+         target_device_id=excluded.target_device_id, peer_signing_public_key=excluded.peer_signing_public_key,
+         peer_signing_key_fingerprint=excluded.peer_signing_key_fingerprint",
         params![
             config.endpoint,
             config.clinic_id,
             config.device_id,
-            config.trusted_server_public_key,
             i64::from(config.enabled),
-            Utc::now().to_rfc3339()
+            Utc::now().to_rfc3339(),
+            config.target_device_id,
+            config.peer_signing_public_key,
+            config.peer_signing_key_fingerprint,
         ],
     )?;
     Ok(())
@@ -196,6 +234,10 @@ fn set_cursor(connection: &Connection, direction: &str, value: &str) -> Result<(
     Ok(())
 }
 
+pub fn advance_pull_cursor(connection: &Connection, value: &str) -> Result<(), SyncError> {
+    set_cursor(connection, "pull", value)
+}
+
 pub fn batch_seen(connection: &Connection, batch_id: &str) -> Result<bool, SyncError> {
     let count: i64 = connection.query_row(
         "SELECT COUNT(*) FROM sync_seen_batches WHERE batch_id=?1",
@@ -205,15 +247,27 @@ pub fn batch_seen(connection: &Connection, batch_id: &str) -> Result<bool, SyncE
     Ok(count > 0)
 }
 
+pub fn batch_applied_at(
+    connection: &Connection,
+    batch_id: &str,
+) -> Result<Option<String>, SyncError> {
+    connection
+        .query_row(
+            "SELECT applied_at FROM sync_seen_batches WHERE batch_id=?1",
+            [batch_id],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(Into::into)
+}
+
 pub fn apply_batch(
     connection: &mut Connection,
     batch_id: &str,
     content_hash: &str,
-    cursor_value: &str,
     mut items: Vec<TransferItem>,
 ) -> Result<(), SyncError> {
     if batch_seen(connection, batch_id)? {
-        set_cursor(connection, "pull", cursor_value)?;
         return Ok(());
     }
 
@@ -246,11 +300,6 @@ pub fn apply_batch(
     transaction.execute(
         "INSERT INTO sync_seen_batches(batch_id,content_hash,applied_at) VALUES (?1,?2,?3)",
         params![batch_id, content_hash, Utc::now().to_rfc3339()],
-    )?;
-    transaction.execute(
-        "INSERT INTO sync_cursors(direction,cursor_value,updated_at) VALUES ('pull',?1,?2)
-         ON CONFLICT(direction) DO UPDATE SET cursor_value=excluded.cursor_value,updated_at=excluded.updated_at",
-        params![cursor_value, Utc::now().to_rfc3339()],
     )?;
     transaction.execute(
         "UPDATE sync_runtime_flags SET applying_remote=0 WHERE id=1",
@@ -489,17 +538,23 @@ fn required_i64(payload: &Value, key: &str) -> Result<i64, SyncError> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use rusqlite::Connection;
 
-    #[test]
-    fn migration_builds_persistent_queue_and_conflict_tables() {
+    fn database() -> Connection {
         let connection = Connection::open_in_memory().expect("database");
         connection
             .execute_batch(include_str!("../../migrations/0001_initial.sql"))
-            .expect("initial migration");
+            .expect("initial");
         connection
             .execute_batch(include_str!("../../migrations/0002_sync.sql"))
-            .expect("sync migration");
+            .expect("sync");
+        connection
+    }
+
+    #[test]
+    fn migration_builds_persistent_queue_and_conflict_tables() {
+        let connection = database();
         let count: i64 = connection
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('sync_queue','sync_conflicts','sync_staging')",
@@ -519,5 +574,45 @@ mod tests {
             )
             .expect("queue");
         assert_eq!(queued, 1);
+    }
+
+    #[test]
+    fn ack_failure_replays_seen_batch_before_advancing_cursor() {
+        let mut connection = database();
+        advance_pull_cursor(&connection, "0").expect("initial cursor");
+        apply_batch(&mut connection, "batch-1", "hash-1", vec![]).expect("first apply");
+        let imported_at = batch_applied_at(&connection, "batch-1")
+            .expect("seen")
+            .expect("date");
+        assert_eq!(
+            cursor(&connection, "pull").expect("cursor").as_deref(),
+            Some("0")
+        );
+
+        apply_batch(&mut connection, "batch-1", "hash-1", vec![]).expect("idempotent replay");
+        assert_eq!(
+            batch_applied_at(&connection, "batch-1")
+                .expect("seen")
+                .as_deref(),
+            Some(imported_at.as_str())
+        );
+        let audits: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM audit_events WHERE action='sync.batch_applied'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("audit count");
+        assert_eq!(audits, 1);
+        assert_eq!(
+            cursor(&connection, "pull").expect("cursor").as_deref(),
+            Some("0")
+        );
+
+        advance_pull_cursor(&connection, "7").expect("ack succeeded");
+        assert_eq!(
+            cursor(&connection, "pull").expect("cursor").as_deref(),
+            Some("7")
+        );
     }
 }

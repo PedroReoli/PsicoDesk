@@ -20,26 +20,29 @@ use zeroize::Zeroizing;
 use super::{
     client::SyncClient,
     crypto,
-    models::{BatchEnvelope, SyncConfig, SyncStatus, TransferItem, SYNC_SCHEMA_VERSION},
+    models::{
+        BatchEnvelope, PayloadResponse, PullResponse, PushResponse, SyncConfig, SyncStatus,
+        TransferItem, SYNC_SCHEMA_VERSION,
+    },
     repository::{self, DbContext},
     SyncError,
 };
 
 #[derive(Clone)]
 pub struct RuntimeCredentials {
-    access_token: Zeroizing<String>,
+    device_secret: Zeroizing<String>,
     encryption_key: Zeroizing<Vec<u8>>,
 }
 
 impl RuntimeCredentials {
-    pub fn new(access_token: String, encryption_key: Vec<u8>) -> Result<Self, SyncError> {
-        if access_token.trim().len() < 16 {
+    pub fn new(device_secret: String, encryption_key: Vec<u8>) -> Result<Self, SyncError> {
+        if device_secret.trim().len() < 32 {
             return Err(SyncError::InvalidConfig(
-                "O token de sincronização é inválido.".into(),
+                "O segredo do dispositivo é inválido.".into(),
             ));
         }
         Ok(Self {
-            access_token: Zeroizing::new(access_token),
+            device_secret: Zeroizing::new(device_secret),
             encryption_key: Zeroizing::new(encryption_key),
         })
     }
@@ -51,6 +54,12 @@ struct WorkerContext {
     database: DbContext,
     signing_key_path: PathBuf,
     credentials: RuntimeCredentials,
+    token_cache: Arc<tokio::sync::Mutex<Option<CachedToken>>>,
+}
+
+struct CachedToken {
+    value: Zeroizing<String>,
+    expires_at: chrono::DateTime<Utc>,
 }
 
 struct SyncRuntimeInner {
@@ -123,6 +132,7 @@ impl SyncRuntime {
             database,
             signing_key_path,
             credentials,
+            token_cache: Arc::new(tokio::sync::Mutex::new(None)),
         };
         *self
             .inner
@@ -184,7 +194,22 @@ impl SyncRuntime {
     async fn websocket_loop(&self, context: WorkerContext) {
         let mut attempt = 0u32;
         while self.inner.running.load(Ordering::Acquire) {
-            match websocket_request(&context) {
+            let ticket = match SyncClient::new() {
+                Ok(client) => match access_token(&context, &client, false).await {
+                    Ok(token) => match client.realtime_ticket(&context.config, &token).await {
+                        Err(SyncError::HttpStatus(401)) => {
+                            match access_token(&context, &client, true).await {
+                                Ok(token) => client.realtime_ticket(&context.config, &token).await,
+                                Err(error) => Err(error),
+                            }
+                        }
+                        result => result,
+                    },
+                    Err(error) => Err(error),
+                },
+                Err(error) => Err(error),
+            };
+            match ticket.and_then(|ticket| websocket_request(&context, &ticket.ticket)) {
                 Ok(request) => match connect_async(request).await {
                     Ok((mut stream, _)) => {
                         attempt = 0;
@@ -253,6 +278,7 @@ impl SyncRuntime {
 
 async fn run_once(context: &WorkerContext) -> Result<(), SyncError> {
     let client = SyncClient::new()?;
+    validate_paired_peer(context, &client).await?;
     let connection = context.database.open()?;
     let queue = repository::load_pending(&connection, 100)?;
     let queue_ids: Vec<String> = queue.iter().map(|item| item.queue_id.clone()).collect();
@@ -263,17 +289,10 @@ async fn run_once(context: &WorkerContext) -> Result<(), SyncError> {
 
     if !queue.is_empty() {
         let envelope = build_envelope(context, &queue)?;
-        match client
-            .push_batch(
-                &context.config,
-                context.credentials.access_token.as_str(),
-                &envelope,
-            )
-            .await
-        {
+        match push_with_refresh(context, &client, &envelope).await {
             Ok(response) => {
                 let connection = context.database.open()?;
-                repository::mark_sent(&connection, &queue_ids, &response.cursor)?;
+                repository::mark_sent(&connection, &queue_ids, &response.delivery_cursor)?;
             }
             Err(error) => {
                 let connection = context.database.open()?;
@@ -284,41 +303,191 @@ async fn run_once(context: &WorkerContext) -> Result<(), SyncError> {
     }
 
     let connection = context.database.open()?;
-    let previous_cursor = repository::cursor(&connection, "pull")?;
+    let mut cursor = repository::cursor(&connection, "pull")?.unwrap_or_else(|| "0".into());
     drop(connection);
-    let response = client
-        .pull_batches(
-            &context.config,
-            context.credentials.access_token.as_str(),
-            previous_cursor.as_deref(),
-        )
-        .await?;
-    let batch_count = response.batches.len();
-    for (index, envelope) in response.batches.into_iter().enumerate() {
-        let items = decode_envelope(context, &envelope)?;
-        let cursor = if index + 1 == batch_count {
-            response.cursor.as_str()
-        } else {
-            previous_cursor.as_deref().unwrap_or("")
-        };
-        let mut connection = context.database.open()?;
-        repository::apply_batch(
-            &mut connection,
-            &envelope.batch_id,
-            &envelope.content_hash,
-            cursor,
-            items,
-        )?;
-        drop(connection);
-        client
-            .acknowledge(
-                &context.config,
-                context.credentials.access_token.as_str(),
+    loop {
+        let response = pull_with_refresh(context, &client, &cursor).await?;
+        let page_was_empty = response.items.is_empty();
+        for metadata in response.items {
+            let payload = payload_with_refresh(context, &client, &metadata.batch_id).await?;
+            let delivery_cursor = metadata.delivery_cursor.clone();
+            let envelope = metadata.with_payload(payload)?;
+            let items = match decode_envelope(context, &envelope) {
+                Ok(items) => items,
+                Err(error) => {
+                    let _ = acknowledge_with_refresh(
+                        context,
+                        &client,
+                        &envelope,
+                        "rejected",
+                        &envelope.created_at,
+                    )
+                    .await;
+                    return Err(error);
+                }
+            };
+            let mut connection = context.database.open()?;
+            repository::apply_batch(
+                &mut connection,
                 &envelope.batch_id,
-            )
-            .await?;
+                &envelope.content_hash,
+                items,
+            )?;
+            let imported_at = repository::batch_applied_at(&connection, &envelope.batch_id)?
+                .ok_or_else(|| SyncError::State("lote aplicado sem registro idempotente".into()))?;
+            drop(connection);
+            acknowledge_with_refresh(context, &client, &envelope, "applied", &imported_at).await?;
+            let connection = context.database.open()?;
+            repository::advance_pull_cursor(&connection, &delivery_cursor)?;
+        }
+        if page_was_empty {
+            let connection = context.database.open()?;
+            repository::advance_pull_cursor(&connection, &response.next_cursor)?;
+        }
+        if !response.has_more {
+            break;
+        }
+        if response.next_cursor == cursor {
+            return Err(SyncError::InvalidBatch(
+                "paginação remota não avançou".into(),
+            ));
+        }
+        cursor = response.next_cursor;
     }
     Ok(())
+}
+
+async fn access_token(
+    context: &WorkerContext,
+    client: &SyncClient,
+    force_refresh: bool,
+) -> Result<String, SyncError> {
+    let mut cache = context.token_cache.lock().await;
+    if !force_refresh {
+        if let Some(token) = cache.as_ref() {
+            if token.expires_at > Utc::now() + ChronoDuration::seconds(60) {
+                return Ok(token.value.to_string());
+            }
+        }
+    }
+    let issued = client
+        .authenticate(&context.config, context.credentials.device_secret.as_str())
+        .await?;
+    if issued.access_token.trim().is_empty() || issued.expires_in <= 0 {
+        return Err(SyncError::InvalidConfig(
+            "Resposta de autenticação do dispositivo inválida.".into(),
+        ));
+    }
+    let value = issued.access_token;
+    *cache = Some(CachedToken {
+        value: Zeroizing::new(value.clone()),
+        expires_at: Utc::now() + ChronoDuration::seconds(issued.expires_in),
+    });
+    Ok(value)
+}
+
+async fn validate_paired_peer(
+    context: &WorkerContext,
+    client: &SyncClient,
+) -> Result<(), SyncError> {
+    let mut token = access_token(context, client, false).await?;
+    let peers = match client.peers(&context.config, &token).await {
+        Err(SyncError::HttpStatus(401)) => {
+            token = access_token(context, client, true).await?;
+            client.peers(&context.config, &token).await?
+        }
+        result => result?,
+    };
+    let valid = peers.peers.iter().any(|peer| {
+        peer.device_id == context.config.target_device_id
+            && peer.signing_public_key == context.config.peer_signing_public_key
+            && peer
+                .signing_key_fingerprint
+                .eq_ignore_ascii_case(&context.config.peer_signing_key_fingerprint)
+    });
+    if !valid {
+        return Err(SyncError::InvalidConfig(
+            "O dispositivo pareado não consta no diretório autenticado.".into(),
+        ));
+    }
+    Ok(())
+}
+
+async fn push_with_refresh(
+    context: &WorkerContext,
+    client: &SyncClient,
+    envelope: &BatchEnvelope,
+) -> Result<PushResponse, SyncError> {
+    let token = access_token(context, client, false).await?;
+    match client.push_batch(&context.config, &token, envelope).await {
+        Err(SyncError::HttpStatus(401)) => {
+            let token = access_token(context, client, true).await?;
+            client.push_batch(&context.config, &token, envelope).await
+        }
+        result => result,
+    }
+}
+
+async fn pull_with_refresh(
+    context: &WorkerContext,
+    client: &SyncClient,
+    cursor: &str,
+) -> Result<PullResponse, SyncError> {
+    let token = access_token(context, client, false).await?;
+    match client
+        .pull_batches(&context.config, &token, Some(cursor))
+        .await
+    {
+        Err(SyncError::HttpStatus(401)) => {
+            let token = access_token(context, client, true).await?;
+            client
+                .pull_batches(&context.config, &token, Some(cursor))
+                .await
+        }
+        result => result,
+    }
+}
+
+async fn payload_with_refresh(
+    context: &WorkerContext,
+    client: &SyncClient,
+    batch_id: &str,
+) -> Result<PayloadResponse, SyncError> {
+    let token = access_token(context, client, false).await?;
+    match client
+        .fetch_payload(&context.config, &token, batch_id)
+        .await
+    {
+        Err(SyncError::HttpStatus(401)) => {
+            let token = access_token(context, client, true).await?;
+            client
+                .fetch_payload(&context.config, &token, batch_id)
+                .await
+        }
+        result => result,
+    }
+}
+
+async fn acknowledge_with_refresh(
+    context: &WorkerContext,
+    client: &SyncClient,
+    envelope: &BatchEnvelope,
+    status: &str,
+    imported_at: &str,
+) -> Result<(), SyncError> {
+    let token = access_token(context, client, false).await?;
+    match client
+        .acknowledge(&context.config, &token, envelope, status, imported_at)
+        .await
+    {
+        Err(SyncError::HttpStatus(401)) => {
+            let token = access_token(context, client, true).await?;
+            client
+                .acknowledge(&context.config, &token, envelope, status, imported_at)
+                .await
+        }
+        result => result,
+    }
 }
 
 fn build_envelope(
@@ -333,15 +502,19 @@ fn build_envelope(
     let mut envelope = BatchEnvelope {
         schema_version: SYNC_SCHEMA_VERSION,
         batch_id: Uuid::new_v4().to_string(),
-        origin_id: context.config.device_id.clone(),
-        target_id: context.config.clinic_id.clone(),
+        origin_device_id: context.config.device_id.clone(),
+        target_device_id: context.config.target_device_id.clone(),
         created_at: now.to_rfc3339(),
         expires_at: (now + ChronoDuration::minutes(10)).to_rfc3339(),
         content_hash: crypto::hash_ciphertext(&payload_ciphertext)?,
         signature: String::new(),
         signer_public_key: String::new(),
-        nonce,
-        payload_ciphertext,
+        encryption: super::models::EncryptionMetadata {
+            algorithm: "aes-256-gcm".into(),
+            key_id: format!("clinic:{}:v1", context.config.clinic_id),
+            nonce,
+        },
+        payload_base64: payload_ciphertext,
     };
     let signing_key = crypto::load_signing_key(&context.signing_key_path)?;
     crypto::sign_envelope(&mut envelope, &signing_key);
@@ -362,9 +535,14 @@ fn decode_envelope(
             "identificador de lote inválido".into(),
         ));
     }
-    if envelope.target_id != context.config.clinic_id {
+    if envelope.target_device_id != context.config.device_id {
         return Err(SyncError::InvalidBatch(
-            "lote destinado a outra clínica".into(),
+            "lote destinado a outro dispositivo".into(),
+        ));
+    }
+    if envelope.origin_device_id != context.config.target_device_id {
+        return Err(SyncError::InvalidBatch(
+            "lote originado por dispositivo não pareado".into(),
         ));
     }
     let expires_at = chrono::DateTime::parse_from_rfc3339(&envelope.expires_at)
@@ -372,10 +550,19 @@ fn decode_envelope(
     if expires_at < Utc::now() {
         return Err(SyncError::InvalidBatch("lote expirado".into()));
     }
-    crypto::verify_envelope(envelope, &context.config.trusted_server_public_key)?;
+    if envelope.encryption.algorithm != "aes-256-gcm" {
+        return Err(SyncError::InvalidBatch(
+            "algoritmo de criptografia incompatível".into(),
+        ));
+    }
+    crypto::verify_envelope(
+        envelope,
+        &context.config.peer_signing_public_key,
+        &context.config.peer_signing_key_fingerprint,
+    )?;
     let plaintext = crypto::decrypt(
-        &envelope.nonce,
-        &envelope.payload_ciphertext,
+        &envelope.encryption.nonce,
+        &envelope.payload_base64,
         context.credentials.encryption_key.as_slice(),
     )?;
     serde_json::from_slice(&plaintext).map_err(Into::into)
@@ -383,24 +570,18 @@ fn decode_envelope(
 
 fn websocket_request(
     context: &WorkerContext,
+    ticket: &str,
 ) -> Result<tokio_tungstenite::tungstenite::http::Request<()>, SyncError> {
     let mut url = Url::parse(&context.config.endpoint)
         .map_err(|_| SyncError::InvalidConfig("Endpoint de sincronização inválido.".into()))?;
     url.set_scheme(if url.scheme() == "https" { "wss" } else { "ws" })
         .map_err(|_| SyncError::InvalidConfig("Endpoint de sincronização inválido.".into()))?;
-    url.set_path("/v1/signal");
-    url.set_query(Some(&format!(
-        "clinicId={}&deviceId={}",
-        context.config.clinic_id, context.config.device_id
-    )));
-    let mut request = url
+    url.set_path("/v1/realtime");
+    url.query_pairs_mut().clear().append_pair("ticket", ticket);
+    let request = url
         .as_str()
         .into_client_request()
         .map_err(SyncError::WebSocket)?;
-    let authorization = format!("Bearer {}", context.credentials.access_token.as_str())
-        .parse()
-        .map_err(|_| SyncError::InvalidConfig("Token de sincronização inválido.".into()))?;
-    request.headers_mut().insert("authorization", authorization);
     Ok(request)
 }
 
@@ -409,11 +590,11 @@ fn is_sync_signal(message: &str) -> bool {
         .ok()
         .and_then(|value| {
             value
-                .get("event")
+                .get("type")
                 .and_then(|event| event.as_str())
                 .map(str::to_owned)
         })
-        .is_some_and(|event| event == "syncAvailable")
+        .is_some_and(|event| event == "batch.available")
 }
 
 fn reconnect_delay(attempt: u32) -> Duration {
@@ -430,8 +611,10 @@ mod tests {
 
     #[test]
     fn signal_requires_expected_event() {
-        assert!(is_sync_signal(r#"{"event":"syncAvailable"}"#));
-        assert!(!is_sync_signal(r#"{"event":"connected"}"#));
+        assert!(is_sync_signal(
+            r#"{"type":"batch.available","batchId":"0f927a23-df4a-4eb2-8c9d-b8cd03c54ccb"}"#
+        ));
+        assert!(!is_sync_signal(r#"{"type":"device.presence"}"#));
         assert!(!is_sync_signal("not-json"));
     }
 
