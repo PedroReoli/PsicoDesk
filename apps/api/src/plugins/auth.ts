@@ -22,7 +22,7 @@ const authPluginImplementation: FastifyPluginAsync<AuthPluginOptions> = async (a
     verify: { allowedIss: 'psicodesk-api', allowedAud: 'psicodesk-device' },
   });
 
-  app.decorateRequest('principal', null);
+  app.decorateRequest('principal', null as unknown as import('../domain/types.js').Principal);
   app.decorate('authenticate', async function authenticate(request) {
     try {
       const claims = await request.jwtVerify<JwtClaims>();

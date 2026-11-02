@@ -18,7 +18,7 @@ export class S3StorageAdapter implements StorageAdapter {
   constructor(private readonly config: S3StorageConfig) {
     this.client = new S3Client({
       region: config.region,
-      endpoint: config.endpoint,
+      ...(config.endpoint ? { endpoint: config.endpoint } : {}),
       forcePathStyle: config.forcePathStyle,
       credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
       requestHandler: new NodeHttpHandler({ requestTimeout: 8_000, connectionTimeout: 3_000 }),

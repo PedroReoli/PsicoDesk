@@ -80,13 +80,18 @@ export async function buildApp(dependencies: AppDependencies): Promise<FastifyIn
         .code(error.statusCode)
         .send({ error: error.code, message: error.message, requestId });
     }
-    if (error.validation) {
+    if (typeof error === 'object' && error !== null && 'validation' in error) {
       return reply
         .code(400)
         .send({ error: 'INVALID_INPUT', message: 'Entrada inválida.', requestId });
     }
+    const internalError = error instanceof Error ? error : new Error('Unknown request failure');
     request.log.error(
-      { errorName: error.name, errorCode: error.code, requestId },
+      {
+        errorName: internalError.name,
+        errorCode: 'code' in internalError ? internalError.code : undefined,
+        requestId,
+      },
       'request failed',
     );
     return reply.code(500).send({ error: 'INTERNAL_ERROR', message: 'Falha interna.', requestId });

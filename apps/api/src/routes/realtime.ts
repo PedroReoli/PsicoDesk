@@ -15,7 +15,10 @@ export function realtimeRoutes(hub: RealtimeHub): FastifyPluginAsync {
           socket,
         );
         socket.on('message', (data) => {
-          if (data.byteLength > 1_024) {
+          const byteLength = Array.isArray(data)
+            ? data.reduce((total, fragment) => total + fragment.byteLength, 0)
+            : data.byteLength;
+          if (byteLength > 1_024) {
             socket.close(1009, 'message too large');
             return;
           }
