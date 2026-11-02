@@ -20,6 +20,7 @@ export default function DocumentsPage() {
   const [patientId, setPatientId] = useState('');
   const [panel, setPanel] = useState(false);
   const [exported, setExported] = useState('');
+  const [pendingExport, setPendingExport] = useState<string | null>(null);
   const patients = useDirectoryOptions('patients');
   const { documents, loading, error, reload, generate, exportDocument } = useDocuments(patientId);
   return (
@@ -84,7 +85,9 @@ export default function DocumentsPage() {
                 {new Date(document.createdAt).toLocaleDateString('pt-BR')}
               </p>
               <small>Integridade {document.checksum.slice(0, 10)}…</small>
-              <Button variant="ghost" onClick={() => void exportDocument(document.id).then(setExported)}>Exportar cópia legível</Button>
+              {pendingExport === document.id ? (
+                <div><p>Esta cópia .txt ficará legível fora do cofre, em Documentos/PsicoDesk/Documentos.</p><Button onClick={() => void exportDocument(document.id).then((path) => { setExported(path); setPendingExport(null); })}>Confirmar exportação legível</Button><Button variant="ghost" onClick={() => { setPendingExport(null); }}>Cancelar</Button></div>
+              ) : <Button variant="ghost" onClick={() => { setPendingExport(document.id); }}>Exportar cópia legível fora do cofre</Button>}
             </article>
           ))}
         </div>

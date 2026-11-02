@@ -1,10 +1,13 @@
-use std::fs;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use aes_gcm::{aead::Aead, Aes256Gcm, KeyInit, Nonce};
 use rand::{rngs::OsRng, RngCore};
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use tauri::State;
+use tauri::{Manager, State};
 use uuid::Uuid;
 
 use crate::{
@@ -144,6 +147,7 @@ pub fn generate_document(
 
 #[tauri::command(rename_all = "camelCase")]
 pub fn export_document(
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
     session_token: String,
     document_id: String,
@@ -172,14 +176,12 @@ pub fn export_document(
             return Err(AppError::Forbidden.into());
         }
     }
-    let encrypted = fs::read(
-        state
-            .data_dir
-            .join("documents")
-            .join(&document.encrypted_path),
-    )
-    .map_err(AppError::from)
-    .map_err(CommandError::from)?;
+    let encrypted_path =
+        safe_document_path(&state.data_dir.join("documents"), &document.encrypted_path)
+            .map_err(CommandError::from)?;
+    let encrypted = fs::read(encrypted_path)
+        .map_err(AppError::from)
+        .map_err(CommandError::from)?;
     if encrypted.len() < 16 || &encrypted[..4] != b"PSD1" {
         return Err(AppError::Security("Documento protegido inválido.".into()).into());
     }
@@ -196,7 +198,12 @@ pub fn export_document(
                 "Documento não pôde ser autenticado.".into(),
             ))
         })?;
-    let exports = state.data_dir.join("exports");
+    let exports = app
+        .path()
+        .document_dir()
+        .map_err(|error| CommandError::from(AppError::Internal(error.to_string())))?
+        .join("PsicoDesk")
+        .join("Documentos");
     fs::create_dir_all(&exports)
         .map_err(AppError::from)
         .map_err(CommandError::from)?;
@@ -219,7 +226,7 @@ pub fn export_document(
         } else {
             &safe_title
         },
-        document.id
+        format!("{}-{}", document.id, Uuid::new_v4())
     );
     let destination = exports.join(file_name);
     let temporary = destination.with_extension("tmp");
@@ -236,8 +243,50 @@ pub fn export_document(
         "document",
         Some(&document.id),
         "success",
-        json!({"managedDirectory":"exports"}),
+        json!({"managedDirectory":"Documents/PsicoDesk/Documentos"}),
     )
     .map_err(CommandError::from)?;
     Ok(destination.to_string_lossy().into_owned())
+}
+
+fn safe_document_path(directory: &Path, stored_name: &str) -> Result<PathBuf, AppError> {
+    let path = Path::new(stored_name);
+    if path.components().count() != 1
+        || path.extension().and_then(|value| value.to_str()) != Some("psd")
+    {
+        return Err(AppError::Security("Caminho de documento inválido.".into()));
+    }
+    let stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| AppError::Security("Caminho de documento inválido.".into()))?;
+    Uuid::parse_str(stem)
+        .map_err(|_| AppError::Security("Caminho de documento inválido.".into()))?;
+    let canonical_directory = directory.canonicalize()?;
+    let candidate = directory.join(path);
+    let metadata = fs::symlink_metadata(&candidate)?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(AppError::Security(
+            "Documento deve ser um arquivo regular.".into(),
+        ));
+    }
+    let canonical = candidate.canonicalize()?;
+    if canonical.parent() != Some(canonical_directory.as_path()) {
+        return Err(AppError::Security(
+            "Documento fora do diretório gerenciado.".into(),
+        ));
+    }
+    Ok(canonical)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn managed_document_path_rejects_traversal() {
+        let directory = tempfile::tempdir().expect("dir");
+        assert!(safe_document_path(directory.path(), "../arquivo.psd").is_err());
+        assert!(safe_document_path(directory.path(), "nao-uuid.psd").is_err());
+    }
 }
