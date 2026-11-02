@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto';
-import type { AcknowledgeBatch, BatchMetadata, CreateBatch } from '@psicodesk/sync-protocol';
+import type {
+  AcknowledgeBatch,
+  BatchListQuery,
+  BatchListResult,
+  BatchMetadata,
+  CreateBatch,
+} from '@psicodesk/sync-protocol';
 import { errors } from '../domain/errors.js';
 import type { Principal, StoredBatch } from '../domain/types.js';
 import type { BatchRepository } from '../repositories/contracts.js';
@@ -8,7 +14,10 @@ const MAX_PAYLOAD_BYTES = 20 * 1024 * 1024;
 const MAX_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
 
 export class BatchService {
-  constructor(private readonly repository: BatchRepository) {}
+  constructor(
+    private readonly repository: BatchRepository,
+    private readonly now: () => number = Date.now,
+  ) {}
 
   async create(
     principal: Principal,
@@ -17,6 +26,12 @@ export class BatchService {
   ): Promise<{ batch: BatchMetadata; created: boolean }> {
     requireScope(principal, 'batches:write');
     if (input.originDeviceId !== principal.deviceId) throw errors.forbidden();
+    if (!principal.signingPublicKey || input.signerPublicKey !== principal.signingPublicKey)
+      throw errors.forbidden();
+    if (input.targetDeviceId === principal.deviceId)
+      throw errors.badRequest('Origem e destino devem ser diferentes.');
+    if (!(await this.repository.isActiveTarget(principal.clinicId, input.targetDeviceId)))
+      throw errors.notFound();
     const payload = Buffer.from(input.payloadBase64, 'base64');
     if (payload.byteLength === 0 || payload.byteLength > MAX_PAYLOAD_BYTES)
       throw errors.badRequest('Carga fora do limite permitido.');
@@ -25,7 +40,7 @@ export class BatchService {
     const digest = createHash('sha256').update(payload).digest('hex');
     if (digest.toLowerCase() !== input.contentHash.toLowerCase())
       throw errors.badRequest('Hash da carga não confere.');
-    const now = Date.now();
+    const now = this.now();
     const expiresAt = Date.parse(input.expiresAt);
     if (expiresAt <= now || expiresAt - now > MAX_RETENTION_MS)
       throw errors.badRequest('Expiração deve estar no futuro e limitada a 7 dias.');
@@ -42,6 +57,11 @@ export class BatchService {
     );
     if (!batch) throw errors.notFound();
     return toMetadata(batch);
+  }
+
+  async list(principal: Principal, query: BatchListQuery): Promise<BatchListResult> {
+    requireScope(principal, 'batches:read');
+    return this.repository.listForTarget(principal.clinicId, principal.deviceId, query);
   }
 
   async payload(

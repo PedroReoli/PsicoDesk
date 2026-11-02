@@ -55,8 +55,8 @@ export class PostgresSyncRepository implements SyncRepository {
         }
         const revision = currentRevision + 1;
         const inserted = await client.query<{ cursor: string }>(
-          `INSERT INTO sync_changes(clinic_id,change_id,source_device_id,entity_type,entity_id,operation,revision,modified_at,payload_ciphertext,payload_hash)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING cursor::text`,
+          `INSERT INTO sync_changes(clinic_id,change_id,source_device_id,entity_type,entity_id,operation,revision,modified_at,encryption,payload_ciphertext,payload_hash)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11) RETURNING cursor::text`,
           [
             clinicId,
             change.changeId,
@@ -66,6 +66,7 @@ export class PostgresSyncRepository implements SyncRepository {
             change.operation,
             revision,
             change.modifiedAt,
+            JSON.stringify(change.encryption),
             Buffer.from(change.payloadCiphertext, 'base64'),
             change.payloadHash,
           ],
@@ -105,10 +106,11 @@ export class PostgresSyncRepository implements SyncRepository {
       operation: SyncChange['operation'];
       revision: number;
       modified_at: Date;
+      encryption: SyncChange['encryption'];
       payload_ciphertext: Buffer;
       payload_hash: string;
     }>(
-      `SELECT cursor::text,change_id,source_device_id,entity_type,entity_id,operation,revision,modified_at,payload_ciphertext,payload_hash
+      `SELECT cursor::text,change_id,source_device_id,entity_type,entity_id,operation,revision,modified_at,encryption,payload_ciphertext,payload_hash
        FROM sync_changes WHERE clinic_id=$1 AND cursor>$2::bigint AND source_device_id<>$3 ORDER BY cursor LIMIT $4`,
       [clinicId, cursor, deviceId, limit + 1],
     );
@@ -123,6 +125,7 @@ export class PostgresSyncRepository implements SyncRepository {
       operation: row.operation,
       revision: row.revision,
       modifiedAt: row.modified_at.toISOString(),
+      encryption: row.encryption,
       payloadCiphertext: row.payload_ciphertext.toString('base64'),
       payloadHash: row.payload_hash,
     }));

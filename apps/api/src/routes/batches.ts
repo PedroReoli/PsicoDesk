@@ -1,15 +1,48 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { acknowledgeBatchSchema, createBatchSchema } from '@psicodesk/sync-protocol';
+import {
+  acknowledgeBatchSchema,
+  batchListQuerySchema,
+  createBatchSchema,
+} from '@psicodesk/sync-protocol';
 import { z } from 'zod';
 import { errors } from '../domain/errors.js';
 import type { BatchService } from '../services/batch-service.js';
 import type { RealtimeHub } from '../services/realtime-hub.js';
-import { securedResponses, uuidParameterSchema } from './schemas.js';
+import {
+  batchListJsonSchema,
+  batchMetadataJsonSchema,
+  createBatchJsonSchema,
+  securedResponses,
+  uuidParameterSchema,
+} from './schemas.js';
 
 const paramsSchema = z.object({ id: z.uuid() });
 
 export function batchRoutes(service: BatchService, realtime: RealtimeHub): FastifyPluginAsync {
   return async (app) => {
+    app.get(
+      '/v1/batches',
+      {
+        preValidation: [app.authenticate],
+        schema: {
+          tags: ['batches'],
+          summary: 'Listar cargas cifradas destinadas ao dispositivo autenticado',
+          security: [{ bearerAuth: [] }],
+          querystring: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              cursor: { type: 'string', pattern: '^\\d+$', default: '0' },
+              limit: { type: 'integer', minimum: 1, maximum: 200, default: 50 },
+              status: { type: 'string', enum: ['pending', 'downloaded'] },
+            },
+          },
+          response: { 200: batchListJsonSchema, ...securedResponses },
+        },
+      },
+      async (request) => service.list(request.principal, batchListQuerySchema.parse(request.query)),
+    );
+
     app.post(
       '/v1/batches',
       {
@@ -24,7 +57,12 @@ export function batchRoutes(service: BatchService, realtime: RealtimeHub): Fasti
             required: ['idempotency-key'],
             properties: { 'idempotency-key': { type: 'string', minLength: 16, maxLength: 128 } },
           },
-          response: { 201: { type: 'object' }, 200: { type: 'object' }, ...securedResponses },
+          body: createBatchJsonSchema,
+          response: {
+            201: batchMetadataJsonSchema,
+            200: batchMetadataJsonSchema,
+            ...securedResponses,
+          },
         },
       },
       async (request, reply) => {
@@ -54,7 +92,7 @@ export function batchRoutes(service: BatchService, realtime: RealtimeHub): Fasti
           summary: 'Consultar metadados da carga',
           security: [{ bearerAuth: [] }],
           params: uuidParameterSchema,
-          response: { 200: { type: 'object' }, ...securedResponses },
+          response: { 200: batchMetadataJsonSchema, ...securedResponses },
         },
       },
       async (request) => service.metadata(request.principal, paramsSchema.parse(request.params).id),
@@ -89,7 +127,17 @@ export function batchRoutes(service: BatchService, realtime: RealtimeHub): Fasti
           summary: 'Confirmar importação',
           security: [{ bearerAuth: [] }],
           params: uuidParameterSchema,
-          response: { 200: { type: 'object' }, ...securedResponses },
+          body: {
+            type: 'object',
+            required: ['status', 'importedAt'],
+            additionalProperties: false,
+            properties: {
+              status: { type: 'string', enum: ['applied', 'rejected'] },
+              importedAt: { type: 'string', format: 'date-time' },
+              resultHash: { type: 'string' },
+            },
+          },
+          response: { 200: batchMetadataJsonSchema, ...securedResponses },
         },
       },
       async (request) =>
