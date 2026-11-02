@@ -1,5 +1,61 @@
 import { StyleSheet, Text, View } from 'react-native';
-import { Card } from '../../src/components/Card'; import { Screen } from '../../src/components/Screen'; import { SyncBadge } from '../../src/components/SyncBadge';
-import { useProjection } from '../../src/data/useProjection'; import { useSync } from '../../src/sync/SyncProvider'; import { colors, spacing, typography } from '../../src/theme/tokens';
-export default function DashboardScreen() { const { counts, error, lastSyncAt } = useSync(); const patients = useProjection('patient').data.length; const appointments = useProjection('appointment').data.length; const charges = useProjection('charge').data.length; const items = [['Pacientes offline', patients], ['Compromissos offline', appointments], ['Cobranças offline', charges], ['Aguardando envio', counts.pending], ['Falhas de sincronização', counts.failed]] as const; return <Screen title="Visão geral" description="Dados materializados localmente após verificação criptográfica." action={<SyncBadge />}><View style={styles.grid}>{items.map(([label, value]) => <Card key={label}><Text style={styles.label}>{label}</Text><Text style={styles.value}>{String(value)}</Text></Card>)}</View>{error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}<Card><Text style={styles.heading}>Zero-knowledge</Text><Text style={styles.detail}>O servidor transporta envelopes opacos. As projeções exibidas aqui ficam cifradas no dispositivo.</Text><Text style={styles.detail}>{lastSyncAt ? `Última sincronização: ${new Date(lastSyncAt).toLocaleString('pt-BR')}` : 'Ainda não sincronizado nesta sessão.'}</Text></Card></Screen>; }
-const styles = StyleSheet.create({ grid: { gap: spacing.md }, label: { color: colors.muted }, value: { color: colors.text, fontSize: 28, fontWeight: '800' }, heading: { color: colors.text, fontSize: typography.heading, fontWeight: '800' }, detail: { color: colors.muted, lineHeight: 22 }, error: { color: colors.danger } });
+import { Card } from '../../src/components/Card';
+import { Screen } from '../../src/components/Screen';
+import { SyncBadge } from '../../src/components/SyncBadge';
+import { useProjection } from '../../src/data/useProjection';
+import { useSync } from '../../src/sync/SyncProvider';
+import { colors, spacing, typography } from '../../src/theme/tokens';
+export default function DashboardScreen() {
+  const { counts, error, lastSyncAt } = useSync();
+  const patients = useProjection('patient').data.length;
+  const appointments = useProjection('appointment').data.length;
+  const charges = useProjection('charge').data.length;
+  const items = [
+    ['Pacientes offline', patients],
+    ['Compromissos offline', appointments],
+    ['Cobranças offline', charges],
+    ['Aguardando envio', counts.pending],
+    ['Falhas de sincronização', counts.failed],
+  ] as const;
+  return (
+    <Screen
+      title="Visão geral"
+      description="Dados materializados localmente após verificação criptográfica."
+      action={<SyncBadge />}
+    >
+      <View style={styles.grid}>
+        {items.map(([label, value]) => (
+          <Card key={label}>
+            <Text style={styles.label}>{label}</Text>
+            <Text style={styles.value}>{String(value)}</Text>
+          </Card>
+        ))}
+      </View>
+      {error ? (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {error}
+        </Text>
+      ) : null}
+      <Card>
+        <Text style={styles.heading}>Zero-knowledge</Text>
+        <Text style={styles.detail}>
+          O servidor transporta envelopes opacos. As projeções exibidas aqui ficam cifradas no
+          dispositivo.
+        </Text>
+        <Text style={styles.detail}>
+          {lastSyncAt
+            ? `Última sincronização: ${new Date(lastSyncAt).toLocaleString('pt-BR')}`
+            : 'Ainda não sincronizado nesta sessão.'}
+        </Text>
+      </Card>
+    </Screen>
+  );
+}
+const styles = StyleSheet.create({
+  grid: { gap: spacing.md },
+  label: { color: colors.muted },
+  value: { color: colors.text, fontSize: 28, fontWeight: '800' },
+  heading: { color: colors.text, fontSize: typography.heading, fontWeight: '800' },
+  detail: { color: colors.muted, lineHeight: 22 },
+  error: { color: colors.danger },
+});

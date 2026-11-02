@@ -1,5 +1,15 @@
 import { invokeCommand } from '../../../shared/services/tauriClient';
-import type { AppSetting, BackupInfo, CreateUserInput, ManagedUser, PortableBackupInfo, RecoveryCode, SyncConfig, SyncDeviceIdentity, SyncStatus } from '../types/settings.types';
+import type {
+  AppSetting,
+  BackupInfo,
+  CreateUserInput,
+  ManagedUser,
+  PortableBackupInfo,
+  RecoveryCode,
+  SyncConfig,
+  SyncDeviceIdentity,
+  SyncStatus,
+} from '../types/settings.types';
 export const settingsService = {
   list: (sessionToken: string) => invokeCommand<AppSetting[]>('get_app_settings', { sessionToken }),
   update: (sessionToken: string, key: string, value: unknown) =>
@@ -44,8 +54,6 @@ export const settingsService = {
     invokeCommand<SyncStatus>('get_sync_status', { sessionToken }),
   startSync: (sessionToken: string, encryptionKeyBase64: string) =>
     invokeCommand<SyncStatus>('start_sync', { sessionToken, input: { encryptionKeyBase64 } }),
-  stopSync: (sessionToken: string) =>
-    invokeCommand<SyncStatus>('stop_sync', { sessionToken }),
-  syncNow: (sessionToken: string) =>
-    invokeCommand<SyncStatus>('sync_now', { sessionToken }),
+  stopSync: (sessionToken: string) => invokeCommand<SyncStatus>('stop_sync', { sessionToken }),
+  syncNow: (sessionToken: string) => invokeCommand<SyncStatus>('sync_now', { sessionToken }),
 };

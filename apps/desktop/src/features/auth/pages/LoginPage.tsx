@@ -49,7 +49,9 @@ export function LoginPage() {
       else await login({ username, password });
     } catch (cause) {
       if (recovering) {
-        setRecoveryError(cause instanceof Error ? cause.message : 'Não foi possível recuperar o acesso.');
+        setRecoveryError(
+          cause instanceof Error ? cause.message : 'Não foi possível recuperar o acesso.',
+        );
       }
     } finally {
       setRecoveringBusy(false);
@@ -100,10 +102,26 @@ export function LoginPage() {
           </Button>
         </div>
         <div>
-          <p className={styles.eyebrow}>{recovering ? 'Recuperação offline' : firstAccess ? 'Configuração inicial' : 'Área segura'}</p>
-          <h2>{recovering ? 'Definir uma nova senha' : firstAccess ? 'Criar administrador local' : 'Boas-vindas de volta'}</h2>
+          <p className={styles.eyebrow}>
+            {recovering
+              ? 'Recuperação offline'
+              : firstAccess
+                ? 'Configuração inicial'
+                : 'Área segura'}
+          </p>
+          <h2>
+            {recovering
+              ? 'Definir uma nova senha'
+              : firstAccess
+                ? 'Criar administrador local'
+                : 'Boas-vindas de volta'}
+          </h2>
         </div>
-        {recoverySuccess && <p className={styles.success} role="status">Senha atualizada. Entre com a nova credencial.</p>}
+        {recoverySuccess && (
+          <p className={styles.success} role="status">
+            Senha atualizada. Entre com a nova credencial.
+          </p>
+        )}
         <form className={styles.form} onSubmit={submit}>
           {firstAccess && !recovering && (
             <Input
@@ -155,7 +173,11 @@ export function LoginPage() {
             </p>
           )}
           <Button type="submit" loading={recovering ? recoveringBusy : busy} fullWidth>
-            {recovering ? 'Atualizar senha' : firstAccess ? 'Criar acesso seguro' : 'Entrar no PsicoDesk'}
+            {recovering
+              ? 'Atualizar senha'
+              : firstAccess
+                ? 'Criar acesso seguro'
+                : 'Entrar no PsicoDesk'}
           </Button>
         </form>
       </section>

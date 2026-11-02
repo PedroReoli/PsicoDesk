@@ -2,16 +2,109 @@ import { getDatabase } from './database';
 import { encryptPayload } from '../security/dataCipher';
 import type { BatchEnvelope, SyncCounts } from '../types/sync';
 import { applyProjectionInCurrentTransaction } from './projectionRepository';
-interface OutboxRow { envelope: string; }
-export interface BatchStore { due(): Promise<BatchEnvelope[]>; queue(envelope: BatchEnvelope): Promise<void>; sent(batchId: string): Promise<void>; failed(batchId: string, code: string, nextAttemptAt: string, terminal: boolean): Promise<void>; cursor(): Promise<string>; saveImported(envelope: BatchEnvelope, plaintext: unknown): Promise<{ importedAt: string }>; setCursor(cursor: string): Promise<void>; counts(): Promise<SyncCounts>; }
+interface OutboxRow {
+  envelope: string;
+}
+export interface BatchStore {
+  due(): Promise<BatchEnvelope[]>;
+  queue(envelope: BatchEnvelope): Promise<void>;
+  sent(batchId: string): Promise<void>;
+  failed(batchId: string, code: string, nextAttemptAt: string, terminal: boolean): Promise<void>;
+  cursor(): Promise<string>;
+  saveImported(envelope: BatchEnvelope, plaintext: unknown): Promise<{ importedAt: string }>;
+  setCursor(cursor: string): Promise<void>;
+  counts(): Promise<SyncCounts>;
+}
 export class SqliteBatchStore implements BatchStore {
-  async due() { const db = await getDatabase(); const rows = await db.getAllAsync<OutboxRow>("SELECT envelope FROM batch_outbox WHERE status='pending' AND next_attempt_at<=? ORDER BY next_attempt_at LIMIT 50", new Date().toISOString()); return rows.map((row) => JSON.parse(row.envelope) as BatchEnvelope); }
-  async queue(envelope: BatchEnvelope) { const db = await getDatabase(); await db.runAsync('INSERT OR IGNORE INTO batch_outbox(batch_id,envelope,idempotency_key,next_attempt_at) VALUES (?,?,?,?)', envelope.batchId, JSON.stringify(envelope), envelope.batchId, new Date().toISOString()); }
-  async sent(batchId: string) { const db = await getDatabase(); await db.runAsync('DELETE FROM batch_outbox WHERE batch_id=?', batchId); }
-  async failed(batchId: string, code: string, nextAttemptAt: string, terminal: boolean) { const db = await getDatabase(); await db.runAsync('UPDATE batch_outbox SET attempts=attempts+1,last_error=?,next_attempt_at=?,status=? WHERE batch_id=?', code, nextAttemptAt, terminal ? 'failed' : 'pending', batchId); }
-  async cursor() { const db = await getDatabase(); const row = await db.getFirstAsync<{ cursor: string }>('SELECT cursor FROM batch_state WHERE id=1'); return row?.cursor ?? '0'; }
-  async saveImported(envelope: BatchEnvelope, plaintext: unknown) { const db = await getDatabase(); const encrypted = await encryptPayload(JSON.stringify(plaintext)); const firstImportedAt = new Date().toISOString(); let importedAt = firstImportedAt; await db.withTransactionAsync(async () => { const seen = await db.getFirstAsync<{ received_at: string }>('SELECT received_at FROM batch_inbox WHERE batch_id=?', envelope.batchId); if (seen) { importedAt = seen.received_at; return; } await applyProjectionInCurrentTransaction(plaintext); await db.runAsync('INSERT INTO batch_inbox(batch_id,envelope,imported_payload,received_at) VALUES (?,?,?,?)', envelope.batchId, JSON.stringify(envelope), encrypted, firstImportedAt); }); return { importedAt }; }
-  async setCursor(cursor: string) { const db = await getDatabase(); await db.runAsync('INSERT INTO batch_state(id,cursor,synced_at) VALUES (1,?,?) ON CONFLICT(id) DO UPDATE SET cursor=excluded.cursor,synced_at=excluded.synced_at', cursor, new Date().toISOString()); }
-  async counts() { const db = await getDatabase(); const pending = await db.getFirstAsync<{ total: number }>("SELECT COUNT(*) total FROM batch_outbox WHERE status='pending'"); const failed = await db.getFirstAsync<{ total: number }>("SELECT COUNT(*) total FROM batch_outbox WHERE status='failed'"); const received = await db.getFirstAsync<{ total: number }>('SELECT COUNT(*) total FROM batch_inbox'); return { pending: pending?.total ?? 0, failed: failed?.total ?? 0, conflicts: 0, received: received?.total ?? 0 }; }
+  async due() {
+    const db = await getDatabase();
+    const rows = await db.getAllAsync<OutboxRow>(
+      "SELECT envelope FROM batch_outbox WHERE status='pending' AND next_attempt_at<=? ORDER BY next_attempt_at LIMIT 50",
+      new Date().toISOString(),
+    );
+    return rows.map((row) => JSON.parse(row.envelope) as BatchEnvelope);
+  }
+  async queue(envelope: BatchEnvelope) {
+    const db = await getDatabase();
+    await db.runAsync(
+      'INSERT OR IGNORE INTO batch_outbox(batch_id,envelope,idempotency_key,next_attempt_at) VALUES (?,?,?,?)',
+      envelope.batchId,
+      JSON.stringify(envelope),
+      envelope.batchId,
+      new Date().toISOString(),
+    );
+  }
+  async sent(batchId: string) {
+    const db = await getDatabase();
+    await db.runAsync('DELETE FROM batch_outbox WHERE batch_id=?', batchId);
+  }
+  async failed(batchId: string, code: string, nextAttemptAt: string, terminal: boolean) {
+    const db = await getDatabase();
+    await db.runAsync(
+      'UPDATE batch_outbox SET attempts=attempts+1,last_error=?,next_attempt_at=?,status=? WHERE batch_id=?',
+      code,
+      nextAttemptAt,
+      terminal ? 'failed' : 'pending',
+      batchId,
+    );
+  }
+  async cursor() {
+    const db = await getDatabase();
+    const row = await db.getFirstAsync<{ cursor: string }>(
+      'SELECT cursor FROM batch_state WHERE id=1',
+    );
+    return row?.cursor ?? '0';
+  }
+  async saveImported(envelope: BatchEnvelope, plaintext: unknown) {
+    const db = await getDatabase();
+    const encrypted = await encryptPayload(JSON.stringify(plaintext));
+    const firstImportedAt = new Date().toISOString();
+    let importedAt = firstImportedAt;
+    await db.withTransactionAsync(async () => {
+      const seen = await db.getFirstAsync<{ received_at: string }>(
+        'SELECT received_at FROM batch_inbox WHERE batch_id=?',
+        envelope.batchId,
+      );
+      if (seen) {
+        importedAt = seen.received_at;
+        return;
+      }
+      await applyProjectionInCurrentTransaction(plaintext);
+      await db.runAsync(
+        'INSERT INTO batch_inbox(batch_id,envelope,imported_payload,received_at) VALUES (?,?,?,?)',
+        envelope.batchId,
+        JSON.stringify(envelope),
+        encrypted,
+        firstImportedAt,
+      );
+    });
+    return { importedAt };
+  }
+  async setCursor(cursor: string) {
+    const db = await getDatabase();
+    await db.runAsync(
+      'INSERT INTO batch_state(id,cursor,synced_at) VALUES (1,?,?) ON CONFLICT(id) DO UPDATE SET cursor=excluded.cursor,synced_at=excluded.synced_at',
+      cursor,
+      new Date().toISOString(),
+    );
+  }
+  async counts() {
+    const db = await getDatabase();
+    const pending = await db.getFirstAsync<{ total: number }>(
+      "SELECT COUNT(*) total FROM batch_outbox WHERE status='pending'",
+    );
+    const failed = await db.getFirstAsync<{ total: number }>(
+      "SELECT COUNT(*) total FROM batch_outbox WHERE status='failed'",
+    );
+    const received = await db.getFirstAsync<{ total: number }>(
+      'SELECT COUNT(*) total FROM batch_inbox',
+    );
+    return {
+      pending: pending?.total ?? 0,
+      failed: failed?.total ?? 0,
+      conflicts: 0,
+      received: received?.total ?? 0,
+    };
+  }
 }
 export const batchStore = new SqliteBatchStore();

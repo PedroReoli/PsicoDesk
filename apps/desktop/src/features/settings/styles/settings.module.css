@@ -64,9 +64,22 @@
   align-items: center;
   gap: var(--space-2);
 }
-.syncGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
-.identity { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: 12px; background: var(--color-surface-subtle); overflow-wrap: anywhere; }
-.identity code { font-size: 0.75rem; }
+.syncGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.identity {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: 12px;
+  background: var(--color-surface-subtle);
+  overflow-wrap: anywhere;
+}
+.identity code {
+  font-size: 0.75rem;
+}
 .danger {
   padding: 16px;
   border: 1px solid var(--color-danger);
@@ -109,5 +122,7 @@
   .setting > *:first-child {
     width: 100%;
   }
-  .syncGrid { grid-template-columns: 1fr; }
+  .syncGrid {
+    grid-template-columns: 1fr;
+  }
 }

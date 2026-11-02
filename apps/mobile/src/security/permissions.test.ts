@@ -1,2 +1,14 @@
-import assert from 'node:assert/strict'; import { describe, it } from 'node:test'; import { canAccess } from './permissions.ts';
-describe('RBAC mobile', () => { it('nega prontuário a recepção e financeiro a psicólogo', () => { assert.equal(canAccess('receptionist', 'clinicalRecord'), false); assert.equal(canAccess('psychologist', 'finance'), false); }); it('libera somente áreas esperadas para papéis especializados', () => { assert.equal(canAccess('psychologist', 'clinicalRecord'), true); assert.equal(canAccess('finance', 'finance'), true); assert.equal(canAccess('finance', 'patient'), false); }); });
+import assert from 'node:assert/strict';
+import { describe, it } from 'node:test';
+import { canAccess } from './permissions.ts';
+describe('RBAC mobile', () => {
+  it('nega prontuário a recepção e financeiro a psicólogo', () => {
+    assert.equal(canAccess('receptionist', 'clinicalRecord'), false);
+    assert.equal(canAccess('psychologist', 'finance'), false);
+  });
+  it('libera somente áreas esperadas para papéis especializados', () => {
+    assert.equal(canAccess('psychologist', 'clinicalRecord'), true);
+    assert.equal(canAccess('finance', 'finance'), true);
+    assert.equal(canAccess('finance', 'patient'), false);
+  });
+});

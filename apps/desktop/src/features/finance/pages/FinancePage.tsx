@@ -139,7 +139,11 @@ export default function FinancePage() {
       <RightPanel
         open={Boolean(paymentCharge)}
         title="Registrar recebimento"
-        description={paymentCharge ? `${paymentCharge.patientName} · saldo ${formatCurrency(paymentCharge.amountMinor - paymentCharge.paidMinor)}` : undefined}
+        description={
+          paymentCharge
+            ? `${paymentCharge.patientName} · saldo ${formatCurrency(paymentCharge.amountMinor - paymentCharge.paidMinor)}`
+            : undefined
+        }
         onClose={() => {
           setPaymentCharge(null);
         }}

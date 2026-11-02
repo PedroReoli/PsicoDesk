@@ -61,7 +61,10 @@ export async function apiRequest<T>(
     headers,
     ...request
   } = options;
-  const normalizedBaseUrl = normalizeApiUrl(baseUrl, development || dependencies.allowInsecureDevelopment === true);
+  const normalizedBaseUrl = normalizeApiUrl(
+    baseUrl,
+    development || dependencies.allowInsecureDevelopment === true,
+  );
   if (!normalizedBaseUrl)
     throw new ApiError(
       'Configure EXPO_PUBLIC_API_URL antes de sincronizar.',

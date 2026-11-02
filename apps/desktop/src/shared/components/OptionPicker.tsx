@@ -29,7 +29,9 @@ export function OptionPicker({
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('pt-BR');
     return normalized
-      ? options.filter((option) => option.displayName.toLocaleLowerCase('pt-BR').includes(normalized))
+      ? options.filter((option) =>
+          option.displayName.toLocaleLowerCase('pt-BR').includes(normalized),
+        )
       : options;
   }, [options, query]);
 
@@ -65,19 +67,21 @@ export function OptionPicker({
               </button>
             )}
             {filtered.map((option) => (
-            <button
-              key={option.id}
-              type="button"
-              className={option.id === value ? styles.selected : styles.option}
-              role="radio"
-              aria-checked={option.id === value}
-              onClick={() => {
-                onChange(option.id);
-              }}
-            >
-              <strong>{option.displayName}</strong>
-              {option.professionalRegistration && <small>{option.professionalRegistration}</small>}
-            </button>
+              <button
+                key={option.id}
+                type="button"
+                className={option.id === value ? styles.selected : styles.option}
+                role="radio"
+                aria-checked={option.id === value}
+                onClick={() => {
+                  onChange(option.id);
+                }}
+              >
+                <strong>{option.displayName}</strong>
+                {option.professionalRegistration && (
+                  <small>{option.professionalRegistration}</small>
+                )}
+              </button>
             ))}
           </>
         ) : (

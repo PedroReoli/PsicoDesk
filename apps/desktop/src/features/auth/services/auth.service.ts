@@ -1,5 +1,10 @@
 import { invokeCommand } from '../../../shared/services/tauriClient';
-import type { BootstrapAdminInput, LoginInput, RecoverPasswordInput, Session } from '../types/auth.types';
+import type {
+  BootstrapAdminInput,
+  LoginInput,
+  RecoverPasswordInput,
+  Session,
+} from '../types/auth.types';
 
 export const authService = {
   needsBootstrap() {

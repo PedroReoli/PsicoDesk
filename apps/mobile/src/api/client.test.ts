@@ -2,9 +2,79 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { ApiError, apiRequest, type ApiDependencies } from './client.ts';
 const baseUrl = 'http://127.0.0.1:3333';
-function dependencies(fetch: ApiDependencies['fetch']) { return { fetch, sleep: async () => undefined, allowInsecureDevelopment: true } satisfies ApiDependencies; }
+function dependencies(fetch: ApiDependencies['fetch']) {
+  return {
+    fetch,
+    sleep: async () => undefined,
+    allowInsecureDevelopment: true,
+  } satisfies ApiDependencies;
+}
 describe('apiRequest', () => {
-  it('rejeita autenticação inválida sem repetir', async () => { let calls = 0; await assert.rejects(() => apiRequest('/v1/auth/token', { baseUrl, method: 'POST', body: {}, retries: 4, idempotencyKey: 'operation-auth-001' }, dependencies(async () => { calls += 1; return new Response('{}', { status: 401 }); })), (error: unknown) => error instanceof ApiError && error.code === 'AUTH_REQUIRED'); assert.equal(calls, 1); });
-  it('preserva idempotência durante retry de 503', async () => { const keys: string[] = []; let calls = 0; const result = await apiRequest<{ ok: boolean }>('/v1/batches', { baseUrl, method: 'POST', body: { sealed: true }, retries: 2, idempotencyKey: 'batch-000000000001' }, dependencies(async (_url, init) => { calls += 1; keys.push(new Headers(init?.headers).get('Idempotency-Key') ?? ''); return calls === 1 ? new Response('{}', { status: 503 }) : Response.json({ ok: true }); })); assert.equal(result.ok, true); assert.deepEqual(keys, ['batch-000000000001', 'batch-000000000001']); });
-  it('não repete conflito e limita falha offline', async () => { let conflicts = 0; await assert.rejects(() => apiRequest('/v1/batches', { baseUrl, method: 'POST', retries: 3, idempotencyKey: 'batch-conflict-0001' }, dependencies(async () => { conflicts += 1; return new Response('{}', { status: 409 }); })), (error: unknown) => error instanceof ApiError && error.code === 'CONFLICT'); assert.equal(conflicts, 1); let offline = 0; await assert.rejects(() => apiRequest('/v1/batches', { baseUrl, method: 'POST', retries: 2 }, dependencies(async () => { offline += 1; throw new TypeError('offline'); })), (error: unknown) => error instanceof ApiError && error.code === 'NETWORK_ERROR'); assert.equal(offline, 1); });
+  it('rejeita autenticação inválida sem repetir', async () => {
+    let calls = 0;
+    await assert.rejects(
+      () =>
+        apiRequest(
+          '/v1/auth/token',
+          { baseUrl, method: 'POST', body: {}, retries: 4, idempotencyKey: 'operation-auth-001' },
+          dependencies(async () => {
+            calls += 1;
+            return new Response('{}', { status: 401 });
+          }),
+        ),
+      (error: unknown) => error instanceof ApiError && error.code === 'AUTH_REQUIRED',
+    );
+    assert.equal(calls, 1);
+  });
+  it('preserva idempotência durante retry de 503', async () => {
+    const keys: string[] = [];
+    let calls = 0;
+    const result = await apiRequest<{ ok: boolean }>(
+      '/v1/batches',
+      {
+        baseUrl,
+        method: 'POST',
+        body: { sealed: true },
+        retries: 2,
+        idempotencyKey: 'batch-000000000001',
+      },
+      dependencies(async (_url, init) => {
+        calls += 1;
+        keys.push(new Headers(init?.headers).get('Idempotency-Key') ?? '');
+        return calls === 1 ? new Response('{}', { status: 503 }) : Response.json({ ok: true });
+      }),
+    );
+    assert.equal(result.ok, true);
+    assert.deepEqual(keys, ['batch-000000000001', 'batch-000000000001']);
+  });
+  it('não repete conflito e limita falha offline', async () => {
+    let conflicts = 0;
+    await assert.rejects(
+      () =>
+        apiRequest(
+          '/v1/batches',
+          { baseUrl, method: 'POST', retries: 3, idempotencyKey: 'batch-conflict-0001' },
+          dependencies(async () => {
+            conflicts += 1;
+            return new Response('{}', { status: 409 });
+          }),
+        ),
+      (error: unknown) => error instanceof ApiError && error.code === 'CONFLICT',
+    );
+    assert.equal(conflicts, 1);
+    let offline = 0;
+    await assert.rejects(
+      () =>
+        apiRequest(
+          '/v1/batches',
+          { baseUrl, method: 'POST', retries: 2 },
+          dependencies(async () => {
+            offline += 1;
+            throw new TypeError('offline');
+          }),
+        ),
+      (error: unknown) => error instanceof ApiError && error.code === 'NETWORK_ERROR',
+    );
+    assert.equal(offline, 1);
+  });
 });

@@ -2,7 +2,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuthSession } from '../../auth/hooks/useAuthSession';
 import { schedulingService } from '../services/scheduling.service';
-import type { Appointment, AppointmentInput, AppointmentUpdateInput } from '../types/appointment.types';
+import type {
+  Appointment,
+  AppointmentInput,
+  AppointmentUpdateInput,
+} from '../types/appointment.types';
 function weekRange(reference: Date) {
   const start = new Date(reference);
   start.setHours(0, 0, 0, 0);
@@ -40,7 +44,11 @@ export function useAppointments(reference: Date) {
   async function update(appointmentId: string, input: AppointmentUpdateInput) {
     if (!session) throw new Error('Sessão expirada.');
     const item = await schedulingService.updateStatus(session.token, appointmentId, input);
-    setItems((current) => current.map((entry) => entry.id === item.id ? item : entry).sort((a, b) => a.startsAt.localeCompare(b.startsAt)));
+    setItems((current) =>
+      current
+        .map((entry) => (entry.id === item.id ? item : entry))
+        .sort((a, b) => a.startsAt.localeCompare(b.startsAt)),
+    );
   }
   return { items, loading, error, reload: load, create, update };
 }

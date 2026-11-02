@@ -86,8 +86,40 @@ export default function DocumentsPage() {
               </p>
               <small>Integridade {document.checksum.slice(0, 10)}…</small>
               {pendingExport === document.id ? (
-                <div><p>Esta cópia .txt ficará legível fora do cofre, em Documentos/PsicoDesk/Documentos.</p><Button onClick={() => void exportDocument(document.id).then((path) => { setExported(path); setPendingExport(null); })}>Confirmar exportação legível</Button><Button variant="ghost" onClick={() => { setPendingExport(null); }}>Cancelar</Button></div>
-              ) : <Button variant="ghost" onClick={() => { setPendingExport(document.id); }}>Exportar cópia legível fora do cofre</Button>}
+                <div>
+                  <p>
+                    Esta cópia .txt ficará legível fora do cofre, em
+                    Documentos/PsicoDesk/Documentos.
+                  </p>
+                  <Button
+                    onClick={() =>
+                      void exportDocument(document.id).then((path) => {
+                        setExported(path);
+                        setPendingExport(null);
+                      })
+                    }
+                  >
+                    Confirmar exportação legível
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setPendingExport(null);
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setPendingExport(document.id);
+                  }}
+                >
+                  Exportar cópia legível fora do cofre
+                </Button>
+              )}
             </article>
           ))}
         </div>

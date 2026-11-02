@@ -12,15 +12,15 @@ Este documento separa o que é comprovado localmente do que depende de ambiente,
 
 ## Evidência e limitações
 
-| Afirmação | Evidência local | Estado | Limitação |
-| --- | --- | --- | --- |
-| Protocolo compartilhado | Testes do pacote `sync-protocol` e testes dos clientes | Validado em código | Sem teste em rede pública |
-| Mobile conversa com API | Testes E2E HTTP contra Fastify real em porta efêmera | Validado localmente | Sem aparelho físico/iOS |
-| Desktop conversa com API | Testes do cliente, autenticação, batches, ACK e ticket realtime | Validado localmente | Sem PostgreSQL/S3 reais |
-| Desktop funciona sem internet | Sync opt-in e fluxos locais cobertos pelo backend Rust | Validado localmente | Homologação instalada ainda depende do Windows de destino |
-| Continuidade de dados | Backup interno, rollback e backup portátil cifrado | Validado por testes automatizados | Exige rotina off-site do cliente |
-| Distribuição Windows | MSI e NSIS podem ser gerados pelo Tauri | Executável localmente | Sem certificado Authenticode; pode haver SmartScreen |
-| Uso clínico real | Regras de acesso, auditoria e imutabilidade implementadas | Implementado | Revisão clínica, LGPD e jurídica pendentes |
+| Afirmação                     | Evidência local                                                 | Estado                            | Limitação                                                 |
+| ----------------------------- | --------------------------------------------------------------- | --------------------------------- | --------------------------------------------------------- |
+| Protocolo compartilhado       | Testes do pacote `sync-protocol` e testes dos clientes          | Validado em código                | Sem teste em rede pública                                 |
+| Mobile conversa com API       | Testes E2E HTTP contra Fastify real em porta efêmera            | Validado localmente               | Sem aparelho físico/iOS                                   |
+| Desktop conversa com API      | Testes do cliente, autenticação, batches, ACK e ticket realtime | Validado localmente               | Sem PostgreSQL/S3 reais                                   |
+| Desktop funciona sem internet | Sync opt-in e fluxos locais cobertos pelo backend Rust          | Validado localmente               | Homologação instalada ainda depende do Windows de destino |
+| Continuidade de dados         | Backup interno, rollback e backup portátil cifrado              | Validado por testes automatizados | Exige rotina off-site do cliente                          |
+| Distribuição Windows          | MSI e NSIS podem ser gerados pelo Tauri                         | Executável localmente             | Sem certificado Authenticode; pode haver SmartScreen      |
+| Uso clínico real              | Regras de acesso, auditoria e imutabilidade implementadas       | Implementado                      | Revisão clínica, LGPD e jurídica pendentes                |
 
 ## Checklist do primeiro cliente local
 

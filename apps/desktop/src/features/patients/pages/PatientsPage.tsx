@@ -91,7 +91,15 @@ export default function PatientsPage() {
               <Badge tone={patient.status === 'active' ? 'success' : 'neutral'}>
                 {patient.status === 'active' ? 'Ativo' : 'Inativo'}
               </Badge>
-              <Button variant="ghost" onClick={() => { setEditing(patient); setPanelOpen(true); }}>Editar</Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setEditing(patient);
+                  setPanelOpen(true);
+                }}
+              >
+                Editar
+              </Button>
             </article>
           ))}
         </div>
@@ -108,7 +116,18 @@ export default function PatientsPage() {
       >
         <PatientForm
           key={editing?.id ?? 'new'}
-          {...(editing ? { initial: { fullName: editing.fullName, ...(editing.socialName ? { socialName: editing.socialName } : {}), ...(editing.phone ? { phone: editing.phone } : {}), ...(editing.email ? { email: editing.email } : {}), status: editing.status, version: editing.version } } : {})}
+          {...(editing
+            ? {
+                initial: {
+                  fullName: editing.fullName,
+                  ...(editing.socialName ? { socialName: editing.socialName } : {}),
+                  ...(editing.phone ? { phone: editing.phone } : {}),
+                  ...(editing.email ? { email: editing.email } : {}),
+                  status: editing.status,
+                  version: editing.version,
+                },
+              }
+            : {})}
           onSubmit={async (input) => {
             if (editing) await update(editing.id, input);
             else await create(input);

@@ -5,7 +5,13 @@ import type { PatientInput } from '../types/patient.types';
 import { validatePatient } from '../types/patient.types';
 import styles from '../styles/patients.module.css';
 
-export function PatientForm({ onSubmit, initial }: { onSubmit: (input: PatientInput) => Promise<void>; initial?: PatientInput }) {
+export function PatientForm({
+  onSubmit,
+  initial,
+}: {
+  onSubmit: (input: PatientInput) => Promise<void>;
+  initial?: PatientInput;
+}) {
   const [input, setInput] = useState<PatientInput>(initial ?? { fullName: '' });
   const [errors, setErrors] = useState<Partial<Record<keyof PatientInput, string>>>({});
   const [saving, setSaving] = useState(false);

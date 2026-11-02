@@ -11,10 +11,7 @@ import { RecoveryBackupSettings } from '../components/RecoveryBackupSettings';
 import { useSettings } from '../hooks/useSettings';
 import { formatBytes, type BackupInfo } from '../types/settings.types';
 import styles from '../styles/settings.module.css';
-import {
-  SESSION_POLICY_UPDATED_EVENT,
-  useAuthSession,
-} from '../../auth/hooks/useAuthSession';
+import { SESSION_POLICY_UPDATED_EVENT, useAuthSession } from '../../auth/hooks/useAuthSession';
 
 const roleLabel = {
   owner: 'Proprietário',
@@ -105,10 +102,7 @@ export default function SettingsPage() {
                   setAutoLock(event.target.value);
                 }}
               />
-              <Button
-                variant="secondary"
-                onClick={() => void saveSessionPolicy()}
-              >
+              <Button variant="secondary" onClick={() => void saveSessionPolicy()}>
                 Salvar
               </Button>
             </div>

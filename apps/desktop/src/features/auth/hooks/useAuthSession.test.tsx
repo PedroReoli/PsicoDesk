@@ -30,7 +30,10 @@ const session = {
 function Probe() {
   const { session: current, login } = useAuthSession();
   return (
-    <button type="button" onClick={() => void login({ username: 'owner', password: 'SenhaForte123' })}>
+    <button
+      type="button"
+      onClick={() => void login({ username: 'owner', password: 'SenhaForte123' })}
+    >
       {current ? 'Sessão ativa' : 'Entrar'}
     </button>
   );

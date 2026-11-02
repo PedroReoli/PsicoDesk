@@ -85,7 +85,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setAutoLockMinutes(readAutoLockMinutes((event as CustomEvent).detail));
     };
     window.addEventListener(SESSION_POLICY_UPDATED_EVENT, updatePolicy);
-    return () => { window.removeEventListener(SESSION_POLICY_UPDATED_EVENT, updatePolicy); };
+    return () => {
+      window.removeEventListener(SESSION_POLICY_UPDATED_EVENT, updatePolicy);
+    };
   }, []);
 
   useEffect(() => {

@@ -89,7 +89,13 @@ export default function SchedulingPage() {
       ) : (
         <div className={styles.timeline}>
           {items.map((item) => (
-            <article key={item.id} className={styles.slot} onClick={() => { setSelected(item); }}>
+            <article
+              key={item.id}
+              className={styles.slot}
+              onClick={() => {
+                setSelected(item);
+              }}
+            >
               <time dateTime={item.startsAt}>
                 {new Date(item.startsAt).toLocaleTimeString('pt-BR', {
                   hour: '2-digit',
@@ -126,8 +132,24 @@ export default function SchedulingPage() {
           }}
         />
       </RightPanel>
-      <RightPanel open={Boolean(selected)} title="Atualizar agendamento" description="Altere status ou remarque mantendo o controle de versão." onClose={() => { setSelected(null); }}>
-        {selected && <AppointmentActions key={`${selected.id}-${String(selected.version)}`} appointment={selected} onUpdate={async (input) => { await update(selected.id, input); setSelected(null); }} />}
+      <RightPanel
+        open={Boolean(selected)}
+        title="Atualizar agendamento"
+        description="Altere status ou remarque mantendo o controle de versão."
+        onClose={() => {
+          setSelected(null);
+        }}
+      >
+        {selected && (
+          <AppointmentActions
+            key={`${selected.id}-${String(selected.version)}`}
+            appointment={selected}
+            onUpdate={async (input) => {
+              await update(selected.id, input);
+              setSelected(null);
+            }}
+          />
+        )}
       </RightPanel>
     </section>
   );

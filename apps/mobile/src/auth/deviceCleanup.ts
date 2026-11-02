@@ -1,2 +1,13 @@
-export interface DeviceCleanupDependencies { deleteCredentials: () => Promise<void>; clearDatabase: () => Promise<void>; deleteLocalKey: () => Promise<void>; }
-export async function purgeDevice(dependencies: DeviceCleanupDependencies) { const results = await Promise.allSettled([dependencies.deleteCredentials(), dependencies.clearDatabase()]); await dependencies.deleteLocalKey(); return results.every((result) => result.status === 'fulfilled'); }
+export interface DeviceCleanupDependencies {
+  deleteCredentials: () => Promise<void>;
+  clearDatabase: () => Promise<void>;
+  deleteLocalKey: () => Promise<void>;
+}
+export async function purgeDevice(dependencies: DeviceCleanupDependencies) {
+  const results = await Promise.allSettled([
+    dependencies.deleteCredentials(),
+    dependencies.clearDatabase(),
+  ]);
+  await dependencies.deleteLocalKey();
+  return results.every((result) => result.status === 'fulfilled');
+}
