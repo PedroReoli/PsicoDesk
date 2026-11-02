@@ -4,11 +4,16 @@ import { S3StorageAdapter } from './adapters/storage/s3-storage.js';
 import { PostgresAuthRepository } from './repositories/postgres/auth-repository.js';
 import { PostgresBatchRepository } from './repositories/postgres/batch-repository.js';
 import { PostgresDatabase } from './repositories/postgres/database.js';
+import { PostgresDeviceRegistrationRepository } from './repositories/postgres/device-registration-repository.js';
+import { PostgresDeviceDirectoryRepository } from './repositories/postgres/device-directory-repository.js';
 import { PostgresHealthRepository } from './repositories/postgres/health-repository.js';
 import { PostgresSyncRepository } from './repositories/postgres/sync-repository.js';
 import { AuthService } from './services/auth-service.js';
 import { BatchService } from './services/batch-service.js';
+import { DeviceRegistrationService } from './services/device-registration-service.js';
+import { DeviceDirectoryService } from './services/device-directory-service.js';
 import { RealtimeHub } from './services/realtime-hub.js';
+import { RealtimeTicketService } from './services/realtime-ticket-service.js';
 import { SyncService } from './services/sync-service.js';
 import { UploadService } from './services/upload-service.js';
 
@@ -32,10 +37,19 @@ const app = await buildApp({
   jwtSecret: config.JWT_SECRET,
   healthRepository: new PostgresHealthRepository(database),
   authService,
+  deviceRegistrationService: new DeviceRegistrationService(
+    new PostgresDeviceRegistrationRepository(database),
+    authService,
+    config.DEVICE_SECRET_PEPPER,
+  ),
+  deviceDirectoryService: new DeviceDirectoryService(
+    new PostgresDeviceDirectoryRepository(database),
+  ),
   batchService: new BatchService(new PostgresBatchRepository(database)),
   syncService: new SyncService(new PostgresSyncRepository(database)),
   uploadService: new UploadService(storage),
   realtime,
+  realtimeTickets: new RealtimeTicketService(),
 });
 
 const shutdown = async () => {
