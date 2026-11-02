@@ -263,16 +263,13 @@ pub fn recover_password(
         return Err(AppError::InvalidCredentials.into());
     };
     let now = Utc::now();
-    let available = credential.role == crate::domain::models::Role::Owner
-        && credential.status == "active"
-        && chrono::DateTime::parse_from_rfc3339(&credential.expires_at)
-            .ok()
-            .is_some_and(|expires| expires.with_timezone(&Utc) > now)
-        && !credential
-            .locked_until
-            .as_deref()
-            .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
-            .is_some_and(|until| until.with_timezone(&Utc) > now);
+    let available = recovery_is_available(
+        &credential.role,
+        &credential.status,
+        &credential.expires_at,
+        credential.locked_until.as_deref(),
+        now,
+    );
     let matches = password::verify_password(&recovery_code, &credential.code_hash);
     if !available || !matches {
         let attempts = credential.failed_attempts.saturating_add(1);
@@ -321,6 +318,23 @@ fn normalize_recovery_code(value: &str) -> Option<String> {
     (compact.len() == 48 && compact.bytes().all(|byte| byte.is_ascii_hexdigit())).then_some(compact)
 }
 
+fn recovery_is_available(
+    role: &crate::domain::models::Role,
+    status: &str,
+    expires_at: &str,
+    locked_until: Option<&str>,
+    now: chrono::DateTime<Utc>,
+) -> bool {
+    role == &crate::domain::models::Role::Owner
+        && status == "active"
+        && chrono::DateTime::parse_from_rfc3339(expires_at)
+            .ok()
+            .is_some_and(|expires| expires.with_timezone(&Utc) > now)
+        && !locked_until
+            .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+            .is_some_and(|until| until.with_timezone(&Utc) > now)
+}
+
 fn dummy_recovery_hash() -> &'static str {
     static HASH: OnceLock<String> = OnceLock::new();
     HASH.get_or_init(|| {
@@ -331,7 +345,10 @@ fn dummy_recovery_hash() -> &'static str {
 
 #[cfg(test)]
 mod recovery_tests {
-    use super::normalize_recovery_code;
+    use chrono::{Duration, Utc};
+
+    use super::{normalize_recovery_code, recovery_is_available};
+    use crate::domain::models::Role;
 
     #[test]
     fn recovery_code_normalization_accepts_groups_without_weakening_format() {
@@ -339,5 +356,38 @@ mod recovery_tests {
         let grouped = "00112233-44556677-8899aabb-ccddeeff-00112233-44556677";
         assert_eq!(normalize_recovery_code(grouped).as_deref(), Some(compact));
         assert!(normalize_recovery_code("../../not-a-code").is_none());
+    }
+
+    #[test]
+    fn expired_locked_or_non_owner_recovery_is_denied() {
+        let now = Utc::now();
+        assert!(recovery_is_available(
+            &Role::Owner,
+            "active",
+            &(now + Duration::minutes(1)).to_rfc3339(),
+            None,
+            now,
+        ));
+        assert!(!recovery_is_available(
+            &Role::Owner,
+            "active",
+            &(now - Duration::seconds(1)).to_rfc3339(),
+            None,
+            now,
+        ));
+        assert!(!recovery_is_available(
+            &Role::Owner,
+            "active",
+            &(now + Duration::minutes(1)).to_rfc3339(),
+            Some(&(now + Duration::minutes(30)).to_rfc3339()),
+            now,
+        ));
+        assert!(!recovery_is_available(
+            &Role::Admin,
+            "active",
+            &(now + Duration::minutes(1)).to_rfc3339(),
+            None,
+            now,
+        ));
     }
 }
