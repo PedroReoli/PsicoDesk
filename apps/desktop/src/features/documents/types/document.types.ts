@@ -1,0 +1,1 @@
+export type DocumentType='declaration'|'receipt'|'report'|'consent'|'other';export interface ClinicDocument{id:string;patientId?:string|null;title:string;documentType:DocumentType;templateVersion:number;createdAt:string;checksum:string}export interface GenerateDocumentInput{patientId?:string|undefined;title:string;documentType:DocumentType;content:string;templateVersion:number}
