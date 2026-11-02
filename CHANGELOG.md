@@ -22,7 +22,7 @@ As mudanças relevantes deste projeto são registradas aqui. A versão 1.0.0 do 
 
 ### Evidência do build local
 
-- MSI: `PsicoDesk_1.0.0_x64_en-US.msi` — SHA-256 `F6058C71D481A6E9AA5CCD7C24118ABD967F0711F4155F268C254ABEE275E1A2`.
-- NSIS: `PsicoDesk_1.0.0_x64-setup.exe` — SHA-256 `18C18039FF54459E59993F4DAD3789F1FCBD469D4E6B265AC5791A3519CA5062`.
+- MSI: `PsicoDesk_1.0.0_x64_en-US.msi` — SHA-256 `F4AF6A65F0910BA350F3E1FCD0A35D4ED01CA7F339699D0B6C0E6B976DE4880B`.
+- NSIS: `PsicoDesk_1.0.0_x64-setup.exe` — SHA-256 `155C9ECA7A917CF34C8C56625CA549B8EE065019566AB248653330AE869B1905`.
 - Os artefatos estão sem Authenticode e podem acionar o SmartScreen.
 - PostgreSQL/S3 reais, aparelho físico/iOS, publicação e homologações clínica/jurídica permanecem fora desta validação local.
