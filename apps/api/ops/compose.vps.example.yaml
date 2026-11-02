@@ -1,0 +1,57 @@
+name: psicodesk-api
+
+services:
+  api:
+    image: ${PSICODESK_API_IMAGE:?defina imagem imutável da API}
+    env_file:
+      - ${PSICODESK_ENV_FILE:-.env.production}
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 8787
+    expose:
+      - '8787'
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - edge
+
+  caddy:
+    image: caddy:2.11.7-alpine
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?defina API_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?defina ACME_EMAIL}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - edge
+
+networks:
+  edge:
+
+volumes:
+  caddy-data:
+  caddy-config:
