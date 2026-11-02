@@ -9,12 +9,15 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace @psicodesk/desktop",
-    "build": "npm run build --workspace @psicodesk/desktop",
-    "typecheck": "npm run typecheck --workspace @psicodesk/desktop",
+    "dev": "npm run dev:desktop",
+    "dev:api": "npm run dev --workspace @psicodesk/api",
+    "dev:desktop": "npm run dev --workspace @psicodesk/desktop",
+    "dev:mobile": "npm run start --workspace @psicodesk/mobile",
+    "build": "npm run build --workspace @psicodesk/sync-protocol && npm run build --workspace @psicodesk/contracts && npm run build --workspace @psicodesk/desktop && npm run build --workspace @psicodesk/api",
+    "typecheck": "npm run typecheck --workspace @psicodesk/sync-protocol && npm run typecheck --workspace @psicodesk/contracts && npm run typecheck --workspace @psicodesk/desktop && npm run typecheck --workspace @psicodesk/api && npm run typecheck --workspace @psicodesk/mobile",
     "lint": "npm run lint --workspace @psicodesk/desktop",
-    "test": "npm run test --workspace @psicodesk/desktop",
-    "test:run": "npm run test:run --workspace @psicodesk/desktop",
+    "test": "npm run test:run --workspace @psicodesk/desktop && npm run test --workspace @psicodesk/sync-protocol && npm run test --workspace @psicodesk/api && npm run test --workspace @psicodesk/mobile",
+    "test:run": "npm test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "tauri": "npm run tauri --workspace @psicodesk/desktop"
