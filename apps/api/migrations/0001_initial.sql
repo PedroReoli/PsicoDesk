@@ -1,5 +1,3 @@
-BEGIN;
-
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TABLE clinics (
@@ -104,5 +102,3 @@ CREATE TABLE audit_events (
   FOREIGN KEY (clinic_id, device_id) REFERENCES devices(clinic_id, id) ON DELETE SET NULL
 );
 CREATE INDEX audit_events_tenant_time_idx ON audit_events(clinic_id, created_at DESC);
-
-COMMIT;
