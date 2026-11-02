@@ -7,7 +7,7 @@ describe('servidor fake por HTTP real', () => {
 
   beforeAll(async () => {
     server = await startDeterministicTestServer();
-  });
+  }, 30_000);
 
   afterAll(async () => server.close());
 

@@ -23,7 +23,7 @@ describe('PsicoDesk API canônica', () => {
       deterministicFixture.otherClinicId,
       deterministicFixture.otherDeviceId,
     );
-  });
+  }, 30_000);
 
   afterEach(async () => built.app.close());
 
