@@ -12,15 +12,15 @@ use aes_gcm::{
 use argon2::{Algorithm, Argon2, Params, Version};
 use chrono::Utc;
 use rand::{rngs::OsRng, RngCore};
-use rusqlite::{backup::Backup, Connection};
+use rusqlite::{backup::Backup, params, Connection};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use zeroize::Zeroizing;
 
 use crate::{error::AppError, infrastructure::database::Database};
 
-const MAGIC: &[u8; 8] = b"PSDBAK01";
-const VERSION: u16 = 1;
+const MAGIC: &[u8; 8] = b"PSDBAK02";
+const VERSION: u16 = 2;
 const SALT_LEN: usize = 16;
 const NONCE_PREFIX_LEN: usize = 8;
 const TAG_LEN: usize = 16;
@@ -30,6 +30,7 @@ const KDF_ITERATIONS: u32 = 3;
 const KDF_LANES: u32 = 1;
 const HEADER_LEN: usize = 8 + 2 + 4 + 4 + 4 + 4 + 8 + SALT_LEN + NONCE_PREFIX_LEN;
 const MAX_CONTAINER_BYTES: u64 = 64 * 1024 * 1024 * 1024;
+const MAX_DOCUMENT_BYTES: u64 = 256 * 1024 * 1024;
 type DerivedKeys = (Zeroizing<Vec<u8>>, Zeroizing<Vec<u8>>);
 
 #[derive(Debug, Clone, Serialize)]
@@ -55,8 +56,36 @@ impl Drop for TempFile {
     }
 }
 
+struct TempDirectory {
+    parent: PathBuf,
+    path: PathBuf,
+}
+
+impl TempDirectory {
+    fn create(parent: &Path, label: &str) -> Result<Self, AppError> {
+        fs::create_dir_all(parent)?;
+        let path = unique_temp_directory(parent, label);
+        fs::create_dir(&path)?;
+        Ok(Self {
+            parent: parent.to_owned(),
+            path,
+        })
+    }
+
+    fn disarm(mut self) -> PathBuf {
+        std::mem::take(&mut self.path)
+    }
+}
+
+impl Drop for TempDirectory {
+    fn drop(&mut self) {
+        let _ = remove_managed_directory(&self.parent, &self.path);
+    }
+}
+
 pub fn export(
     database: &Database,
+    documents_dir: &Path,
     backup_dir: &Path,
     passphrase: &str,
 ) -> Result<PortableBackupInfo, AppError> {
@@ -70,7 +99,7 @@ pub fn export(
     let mut salt = [0u8; SALT_LEN];
     OsRng.fill_bytes(&mut salt);
     let (database_key, envelope_key) = derive_keys(passphrase, &salt)?;
-    create_portable_database(database, &stage.0, database_key.as_slice())?;
+    create_portable_database(database, documents_dir, &stage.0, database_key.as_slice())?;
     encrypt_file(&stage.0, &output.0, envelope_key.as_slice(), salt)?;
     if final_path.exists() {
         return Err(AppError::Conflict(
@@ -121,6 +150,7 @@ pub fn list(backup_dir: &Path) -> Result<Vec<PortableBackupInfo>, AppError> {
 
 pub fn restore(
     database: &mut Database,
+    documents_dir: &Path,
     backup_dir: &Path,
     backup_id: &str,
     passphrase: &str,
@@ -138,17 +168,210 @@ pub fn restore(
     let database_key = decrypt_file(&source_path, &stage.0, passphrase)?;
     let source = open_encrypted(&stage.0, database_key.as_slice())?;
     verify_integrity(&source)?;
-    let backup = Backup::new(&source, &mut database.connection)?;
-    backup.run_to_completion(16, Duration::from_millis(10), None)?;
-    Ok(())
+    let staged_documents = extract_documents(&source, documents_dir)?;
+    source.execute_batch("DROP TABLE _portable_files; DROP TABLE _portable_manifest;")?;
+    verify_integrity(&source)?;
+    install_database_and_documents(database, &source, documents_dir, staged_documents)
 }
 
-fn create_portable_database(database: &Database, path: &Path, key: &[u8]) -> Result<(), AppError> {
+fn create_portable_database(
+    database: &Database,
+    documents_dir: &Path,
+    path: &Path,
+    key: &[u8],
+) -> Result<(), AppError> {
     let mut destination = open_encrypted_create_new(path, key)?;
     let backup = Backup::new(&database.connection, &mut destination)?;
     backup.run_to_completion(16, Duration::from_millis(10), None)?;
     drop(backup);
+    add_documents(&destination, documents_dir)?;
     verify_integrity(&destination)
+}
+
+fn add_documents(connection: &Connection, documents_dir: &Path) -> Result<(), AppError> {
+    connection.execute_batch(
+        "DROP TABLE IF EXISTS _portable_files;
+         DROP TABLE IF EXISTS _portable_manifest;
+         CREATE TABLE _portable_manifest(
+           path TEXT PRIMARY KEY,
+           size_bytes INTEGER NOT NULL CHECK(size_bytes >= 0),
+           sha256 TEXT NOT NULL CHECK(length(sha256) = 64)
+         );
+         CREATE TABLE _portable_files(
+           path TEXT PRIMARY KEY REFERENCES _portable_manifest(path) ON DELETE CASCADE,
+           content BLOB NOT NULL
+         );",
+    )?;
+    if !documents_dir.exists() {
+        return Ok(());
+    }
+    let directory_metadata = fs::symlink_metadata(documents_dir)?;
+    if directory_metadata.file_type().is_symlink() || !directory_metadata.is_dir() {
+        return Err(AppError::Validation(
+            "Diretório de documentos inválido para o backup.".into(),
+        ));
+    }
+    for entry in fs::read_dir(documents_dir)? {
+        let entry = entry?;
+        let metadata = fs::symlink_metadata(entry.path())?;
+        let file_name = entry.file_name().to_string_lossy().into_owned();
+        if metadata.file_type().is_symlink()
+            || !metadata.is_file()
+            || !valid_document_name(&file_name)
+            || metadata.len() > MAX_DOCUMENT_BYTES
+        {
+            return Err(AppError::Validation(
+                "A pasta de documentos contém um item inseguro ou incompatível.".into(),
+            ));
+        }
+        let content = fs::read(entry.path())?;
+        if content.len() as u64 != metadata.len() {
+            return Err(AppError::Validation(
+                "Um documento mudou durante a criação do backup.".into(),
+            ));
+        }
+        let checksum = hex::encode(Sha256::digest(&content));
+        connection.execute(
+            "INSERT INTO _portable_manifest(path,size_bytes,sha256) VALUES (?1,?2,?3)",
+            params![file_name, metadata.len() as i64, checksum],
+        )?;
+        connection.execute(
+            "INSERT INTO _portable_files(path,content) VALUES (?1,?2)",
+            params![file_name, content],
+        )?;
+    }
+    Ok(())
+}
+
+fn extract_documents(
+    connection: &Connection,
+    documents_dir: &Path,
+) -> Result<TempDirectory, AppError> {
+    let parent = documents_dir
+        .parent()
+        .ok_or_else(|| AppError::Validation("Diretório de documentos inválido.".into()))?;
+    fs::create_dir_all(parent)?;
+    if documents_dir.exists() {
+        let metadata = fs::symlink_metadata(documents_dir)?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            return Err(AppError::Validation(
+                "Diretório atual de documentos inválido.".into(),
+            ));
+        }
+    }
+    let manifest_count: i64 =
+        connection.query_row("SELECT COUNT(*) FROM _portable_manifest", [], |row| {
+            row.get(0)
+        })?;
+    let file_count: i64 =
+        connection.query_row("SELECT COUNT(*) FROM _portable_files", [], |row| row.get(0))?;
+    if manifest_count < 0 || manifest_count != file_count {
+        return Err(invalid_backup());
+    }
+    let stage = TempDirectory::create(parent, "documents-stage")?;
+    let mut statement = connection.prepare(
+        "SELECT m.path,m.size_bytes,m.sha256,f.content
+         FROM _portable_manifest m JOIN _portable_files f ON f.path=m.path
+         ORDER BY m.path",
+    )?;
+    let mut rows = statement.query([])?;
+    let mut extracted = 0i64;
+    while let Some(row) = rows.next()? {
+        let file_name: String = row.get(0)?;
+        let size_bytes: i64 = row.get(1)?;
+        let checksum: String = row.get(2)?;
+        let content: Vec<u8> = row.get(3)?;
+        if !valid_document_name(&file_name)
+            || size_bytes < 0
+            || size_bytes as u64 > MAX_DOCUMENT_BYTES
+            || content.len() as i64 != size_bytes
+            || checksum.len() != 64
+            || hex::encode(Sha256::digest(&content)) != checksum
+        {
+            return Err(invalid_backup());
+        }
+        let destination = stage.path.join(&file_name);
+        if destination.parent() != Some(stage.path.as_path()) {
+            return Err(invalid_backup());
+        }
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(destination)?;
+        file.write_all(&content)?;
+        file.sync_all()?;
+        extracted += 1;
+    }
+    if extracted != manifest_count {
+        return Err(invalid_backup());
+    }
+    Ok(stage)
+}
+
+fn install_database_and_documents(
+    database: &mut Database,
+    source: &Connection,
+    documents_dir: &Path,
+    staged_documents: TempDirectory,
+) -> Result<(), AppError> {
+    let parent = documents_dir
+        .parent()
+        .ok_or_else(|| AppError::Validation("Diretório de documentos inválido.".into()))?;
+    let safety_path = unique_temp_directory(parent, "documents-safety");
+    let had_documents = documents_dir.exists();
+    if had_documents {
+        fs::rename(documents_dir, &safety_path)?;
+    }
+    let staged_path = staged_documents.disarm();
+    if let Err(error) = fs::rename(&staged_path, documents_dir) {
+        if had_documents {
+            let _ = fs::rename(&safety_path, documents_dir);
+        }
+        let _ = remove_managed_directory(parent, &staged_path);
+        return Err(AppError::Io(error));
+    }
+
+    let database_result = (|| {
+        let backup = Backup::new(source, &mut database.connection)?;
+        backup.run_to_completion(16, Duration::from_millis(10), None)?;
+        Ok::<(), AppError>(())
+    })();
+    if let Err(database_error) = database_result {
+        let failed_path = unique_temp_directory(parent, "documents-failed");
+        let moved_failed = fs::rename(documents_dir, &failed_path).is_ok();
+        let restored = !had_documents || fs::rename(&safety_path, documents_dir).is_ok();
+        if moved_failed {
+            let _ = remove_managed_directory(parent, &failed_path);
+        }
+        if !restored {
+            return Err(AppError::Internal(
+                "database restore failed and document rollback failed".into(),
+            ));
+        }
+        return Err(database_error);
+    }
+    if had_documents {
+        if let Err(cleanup_error) = remove_managed_directory(parent, &safety_path) {
+            let failed_path = unique_temp_directory(parent, "documents-failed");
+            if fs::rename(documents_dir, &failed_path).is_err()
+                || fs::rename(&safety_path, documents_dir).is_err()
+            {
+                return Err(AppError::Internal(
+                    "document safety cleanup and rollback failed".into(),
+                ));
+            }
+            remove_managed_directory(parent, &failed_path)?;
+            return Err(cleanup_error);
+        }
+    }
+    Ok(())
+}
+
+fn valid_document_name(value: &str) -> bool {
+    let Some(stem) = value.strip_suffix(".psd") else {
+        return false;
+    };
+    uuid::Uuid::parse_str(stem).is_ok() && value.len() == 40
 }
 
 fn encrypt_file(
@@ -413,6 +636,36 @@ fn unique_temp_path(directory: &Path, label: &str) -> PathBuf {
     directory.join(format!(".{label}-{}.tmp", hex::encode(random)))
 }
 
+fn unique_temp_directory(directory: &Path, label: &str) -> PathBuf {
+    let mut random = [0u8; 8];
+    OsRng.fill_bytes(&mut random);
+    directory.join(format!(".{label}-{}.tmpdir", hex::encode(random)))
+}
+
+fn remove_managed_directory(parent: &Path, path: &Path) -> Result<(), AppError> {
+    let name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| AppError::Validation("Diretório temporário inválido.".into()))?;
+    if path.parent() != Some(parent)
+        || !name.starts_with(".documents-")
+        || !name.ends_with(".tmpdir")
+    {
+        return Err(AppError::Forbidden);
+    }
+    if !path.exists() {
+        return Ok(());
+    }
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(AppError::Validation(
+            "Diretório temporário inválido.".into(),
+        ));
+    }
+    fs::remove_dir_all(path)?;
+    Ok(())
+}
+
 fn valid_backup_id(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes.len() == 41
@@ -471,16 +724,30 @@ mod tests {
         let source = Database::open(&root.path().join("source.db"), &[7u8; 32]).expect("source");
         let large = "x".repeat(CHUNK_SIZE + 32_768);
         source.connection.execute("INSERT INTO app_settings(key,value_json,updated_at) VALUES ('portable_test',?1,'2026-01-01T00:00:00Z')", [&large]).expect("fixture");
+        let source_documents = root.path().join("source-root").join("documents");
+        fs::create_dir_all(&source_documents).expect("source documents");
+        let document_name = "00000000-0000-4000-8000-000000000001.psd";
+        fs::write(
+            source_documents.join(document_name),
+            b"encrypted-document-source",
+        )
+        .expect("document");
         let info = export(
             &source,
+            &source_documents,
             &root.path().join("managed"),
             "frase-secreta-bem-forte-123",
         )
         .expect("export");
         let mut target =
             Database::open(&root.path().join("target.db"), &[9u8; 32]).expect("target");
+        let target_documents = root.path().join("different-root").join("documents");
+        fs::create_dir_all(&target_documents).expect("target documents");
+        let stale_name = "00000000-0000-4000-8000-000000000099.psd";
+        fs::write(target_documents.join(stale_name), b"stale").expect("stale");
         restore(
             &mut target,
+            &target_documents,
             &root.path().join("managed"),
             &info.id,
             "frase-secreta-bem-forte-123",
@@ -495,6 +762,61 @@ mod tests {
             )
             .expect("value");
         assert_eq!(restored.len(), large.len());
+        assert_eq!(
+            fs::read(target_documents.join(document_name)).expect("restored document"),
+            b"encrypted-document-source"
+        );
+        assert!(
+            !target_documents.join(stale_name).exists(),
+            "restore replaces the document set, removing stale destination files"
+        );
+        let leftovers = fs::read_dir(target_documents.parent().expect("parent"))
+            .expect("list parent")
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".documents-")
+            })
+            .count();
+        assert_eq!(
+            leftovers, 0,
+            "successful restore removes safety directories"
+        );
+    }
+
+    #[test]
+    fn missing_document_payload_is_rejected_before_database_or_documents_change() {
+        let root = tempdir().expect("tempdir");
+        let target = Database::open(&root.path().join("target.db"), &[3u8; 32]).expect("target");
+        target.connection.execute("INSERT INTO app_settings(key,value_json,updated_at) VALUES ('target_marker','\"target\"','2026-01-01T00:00:00Z')", []).expect("marker");
+        let target_documents = root.path().join("documents");
+        fs::create_dir_all(&target_documents).expect("documents");
+        let target_file = "00000000-0000-4000-8000-000000000003.psd";
+        fs::write(target_documents.join(target_file), b"keep-me").expect("document");
+
+        let archive = Connection::open_in_memory().expect("archive");
+        archive.execute_batch(
+            "CREATE TABLE _portable_manifest(path TEXT PRIMARY KEY,size_bytes INTEGER NOT NULL,sha256 TEXT NOT NULL);
+             CREATE TABLE _portable_files(path TEXT PRIMARY KEY,content BLOB NOT NULL);
+             INSERT INTO _portable_manifest(path,size_bytes,sha256) VALUES ('00000000-0000-4000-8000-000000000004.psd',4,'0000000000000000000000000000000000000000000000000000000000000000');",
+        ).expect("corrupt manifest");
+
+        assert!(extract_documents(&archive, &target_documents).is_err());
+        let count: i64 = target
+            .connection
+            .query_row(
+                "SELECT COUNT(*) FROM app_settings WHERE key='target_marker'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count");
+        assert_eq!(count, 1);
+        assert_eq!(
+            fs::read(target_documents.join(target_file)).expect("unchanged"),
+            b"keep-me"
+        );
     }
 
     #[test]
@@ -504,6 +826,7 @@ mod tests {
         source.connection.execute("INSERT INTO app_settings(key,value_json,updated_at) VALUES ('source_marker','\"source\"','2026-01-01T00:00:00Z')", []).expect("fixture");
         let info = export(
             &source,
+            &root.path().join("source-documents"),
             &root.path().join("managed"),
             "frase-secreta-bem-forte-123",
         )
@@ -511,8 +834,13 @@ mod tests {
         let mut target =
             Database::open(&root.path().join("target.db"), &[2u8; 32]).expect("target");
         target.connection.execute("INSERT INTO app_settings(key,value_json,updated_at) VALUES ('target_marker','\"target\"','2026-01-01T00:00:00Z')", []).expect("marker");
+        let target_documents = root.path().join("target-documents");
+        fs::create_dir_all(&target_documents).expect("target documents");
+        let target_file = "00000000-0000-4000-8000-000000000002.psd";
+        fs::write(target_documents.join(target_file), b"keep-me").expect("target document");
         assert!(restore(
             &mut target,
+            &target_documents,
             &root.path().join("managed"),
             &info.id,
             "frase-secreta-totalmente-errada"
@@ -527,6 +855,10 @@ mod tests {
             )
             .expect("count");
         assert_eq!(count, 1);
+        assert_eq!(
+            fs::read(target_documents.join(target_file)).expect("unchanged"),
+            b"keep-me"
+        );
 
         let path = root.path().join("managed").join(&info.id);
         let mut file = OpenOptions::new()
@@ -544,6 +876,7 @@ mod tests {
         file.sync_all().expect("sync");
         assert!(restore(
             &mut target,
+            &target_documents,
             &root.path().join("managed"),
             &info.id,
             "frase-secreta-bem-forte-123"
@@ -558,5 +891,22 @@ mod tests {
             )
             .expect("count");
         assert_eq!(count, 1);
+        assert_eq!(
+            fs::read(target_documents.join(target_file)).expect("unchanged"),
+            b"keep-me"
+        );
+
+        assert!(restore(
+            &mut target,
+            &target_documents,
+            &root.path().join("managed"),
+            "portable-20261102T120000Z-00112233.psdbak",
+            "frase-secreta-bem-forte-123"
+        )
+        .is_err());
+        assert_eq!(
+            fs::read(target_documents.join(target_file)).expect("still unchanged"),
+            b"keep-me"
+        );
     }
 }
