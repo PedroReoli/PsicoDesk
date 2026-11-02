@@ -18,13 +18,15 @@ export class ReconnectingSocket {
 
   private scheduleReconnect() {
     this.onState(false);
-    if (!this.stopped) this.timer = setTimeout(() => { this.attempt += 1; void this.connect(); }, backoffDelay(this.attempt));
+    if (this.timer) clearTimeout(this.timer);
+    if (!this.stopped) this.timer = setTimeout(() => { this.timer = null; this.attempt += 1; void this.connect(); }, backoffDelay(this.attempt));
   }
 
   private async connect() {
     if (this.stopped || !API_URL) return;
     try {
       const { ticket } = await apiRequest<{ ticket: string }>('/v1/events/ticket', { method: 'POST', token: this.token, retries: 0 });
+      if (typeof ticket !== 'string' || ticket.length < 16 || ticket.length > 2_048) throw new Error('Ticket de eventos inválido.');
       const url = `${API_URL.replace(/^http/, 'ws')}/v1/events?ticket=${encodeURIComponent(ticket)}`;
       this.socket = new WebSocket(url);
       this.socket.onopen = () => { this.attempt = 0; this.onState(true); };

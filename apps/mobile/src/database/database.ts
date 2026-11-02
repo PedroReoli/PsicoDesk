@@ -1,8 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
-export async function getDatabase() {
-  databasePromise ??= SQLite.openDatabaseAsync('psicodesk-mobile.db');
-  const database = await databasePromise;
+async function initializeDatabase() {
+  const database = await SQLite.openDatabaseAsync('psicodesk-mobile.db');
   await database.execAsync(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
@@ -24,7 +23,8 @@ export async function getDatabase() {
       attempts INTEGER NOT NULL DEFAULT 0,
       next_attempt_at TEXT NOT NULL,
       created_at TEXT NOT NULL,
-      last_error TEXT
+      last_error TEXT,
+      status TEXT NOT NULL DEFAULT 'pending'
     );
     CREATE INDEX IF NOT EXISTS idx_mutation_due ON mutation_queue(next_attempt_at, created_at);
     CREATE TABLE IF NOT EXISTS sync_state (
@@ -34,5 +34,8 @@ export async function getDatabase() {
       last_error TEXT
     );
   `);
+  const columns = await database.getAllAsync<{ name: string }>('PRAGMA table_info(mutation_queue)');
+  if (!columns.some((column) => column.name === 'status')) await database.execAsync("ALTER TABLE mutation_queue ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'");
   return database;
 }
+export async function getDatabase() { databasePromise ??= initializeDatabase().catch((cause) => { databasePromise = null; throw cause; }); return databasePromise; }
